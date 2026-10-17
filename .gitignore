@@ -1,0 +1,26 @@
+# Environments and secrets
+.venv/
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Runtime data: never commit
+logs/
+.sessions/
+eval/results/*.raw.jsonl
+
+# Model caches
+.cache/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

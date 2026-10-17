@@ -1,0 +1,160 @@
+# Scrubber policy. Domain-specific behaviour lives here, not in the engine.
+version: 1
+
+# Which detector layers run by default (ablations override this in code / CLI).
+# L4 needs the GLiNER model (downloaded once, runs locally). L5 needs a local Ollama.
+detectors:
+  enabled: [L1, L2, L3, L4]
+
+# Per-type action for each mode.
+# Actions: REMOVE | PSEUDONYMISE | GENERALISE | KEEP | SHIFT | FLAG
+modes:
+  balanced:
+    secret: REMOVE
+    card: REMOVE
+    iban: REMOVE
+    nhs_number: REMOVE
+    ni_number: REMOVE
+    person: PSEUDONYMISE
+    email: PSEUDONYMISE
+    phone: PSEUDONYMISE
+    user_id: PSEUDONYMISE
+    uuid: PSEUDONYMISE
+    username: PSEUDONYMISE
+    address: PSEUDONYMISE
+    postcode: GENERALISE        # keep the district only (SO17 1BJ -> SO17)
+    ip: PSEUDONYMISE
+    date_of_birth: GENERALISE   # -> 5-year age band
+    date: KEEP
+    organisation: KEEP
+    location: KEEP
+    quasi_identifier: FLAG
+  strict:
+    secret: REMOVE
+    card: REMOVE
+    iban: REMOVE
+    nhs_number: REMOVE
+    ni_number: REMOVE
+    person: PSEUDONYMISE
+    email: PSEUDONYMISE
+    phone: PSEUDONYMISE
+    user_id: PSEUDONYMISE
+    uuid: PSEUDONYMISE
+    username: PSEUDONYMISE
+    address: PSEUDONYMISE
+    postcode: GENERALISE        # keep the area only (SO17 1BJ -> SO)
+    ip: REMOVE
+    date_of_birth: GENERALISE   # -> 10-year age band
+    date: SHIFT
+    organisation: GENERALISE
+    location: GENERALISE
+    quasi_identifier: GENERALISE
+
+# Action for any type not listed above (e.g. a custom pattern type).
+default_action: PSEUDONYMISE
+
+# Address surrogates: keep the postcode district in balanced mode, drop it in strict.
+address_keep_district: {balanced: true, strict: false}
+# Date-of-birth age band width in years.
+dob_band_years: {balanced: 5, strict: 10}
+# Strict-mode date shift: a random whole number of days in +/-[min, max], constant per session.
+date_shift_days: {min: 30, max: 365}
+
+# L1 secrets.
+secrets:
+  entropy_threshold: 4.0
+  entropy_min_length: 20
+  # key names whose value is always a secret (matched on the normalised key)
+  secret_keys: [password, passwd, pwd, pass, secret, client_secret, token, access_token, refresh_token,
+                auth_token, api_key, apikey, access_key, secret_key, private_key, session_id, sessionid, cookie]
+
+# L3 key-aware. Normalised key (or key token) -> type.
+# Matching order: exact normalised key first, then the first listed token found in the key.
+sensitive_keys:
+  company: organisation
+  company_name: organisation
+  organisation: organisation
+  organization: organisation
+  employer: organisation
+  city: location
+  town: location
+  email: email
+  email_address: email
+  mail: email
+  phone: phone
+  phone_number: phone
+  mobile: phone
+  tel: phone
+  telephone: phone
+  dob: date_of_birth
+  date_of_birth: date_of_birth
+  birth: date_of_birth
+  birthday: date_of_birth
+  birthdate: date_of_birth
+  postcode: postcode
+  post_code: postcode
+  zip: postcode
+  address: address
+  street: address
+  addr: address
+  first_name: person
+  last_name: person
+  surname: person
+  full_name: person
+  name: person
+  username: username
+  user_name: username
+  login: username
+  handle: username
+  user_id: user_id
+  customer_id: user_id
+  account_id: user_id
+  user: user
+  customer: user
+  contact: user
+  ip: ip
+  ip_address: ip
+# Keys whose values are free text: no whole-value span, but L4 scans them with a lower threshold.
+freetext_keys: [note, notes, comment, comments, message, msg, description, body, text, details, summary, feedback, remarks]
+# Keys that look sensitive by token but are not (avoid e.g. file_name / host_name -> person).
+non_sensitive_keys: [file_name, filename, host_name, hostname, app_name, service_name, event_name, display_name_format,
+                     table_name, field_name, key_name, model_name, project_name, logger_name, level_name, name_space, namespace,
+                     user_agent, ip_version, email_verified, phone_verified]
+
+# A key like `<x>_name` is a person's name only when <x> is one of these (product_name is not).
+person_name_qualifiers: [first, last, full, given, family, middle, sur, customer, client, contact, patient, person,
+                         employee, member, owner, sender, recipient, author, holder, applicant, user, guardian, parent,
+                         child, spouse, beneficiary, driver, passenger, guest, student, staff, agent, manager, display,
+                         maiden, nick, legal, preferred, emergency, next_of_kin, kin, tenant, landlord, caller]
+
+# Extra regex detectors (run in L2). Example, disabled by default (see "Known limits"):
+custom_patterns:
+  - name: customer_ref
+    type: user_id
+    pattern: '\bCUST-\d{4,}\b'
+    enabled: false
+
+# L4 GLiNER (runs locally).
+ner:
+  model: urchade/gliner_multi_pii-v1
+  threshold: 0.5
+  freetext_threshold: 0.35
+  max_chars: 1200            # chunk long segments
+  # GLiNER label -> type
+  labels:
+    person: person
+    full address: address
+    street address: address
+    city: location
+    country: location
+    organization: organisation
+    date of birth: date_of_birth
+    username: username
+    phone number: phone
+    email: email
+
+# L5 quasi-identifiers via a local Ollama model. Off unless enabled above or with --layers.
+llm_detector:
+  model: llama3.1:8b
+  host: http://localhost:11434
+  timeout_s: 60
