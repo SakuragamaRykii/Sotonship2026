@@ -12,7 +12,6 @@ PRIORITY = {"manual": 0, "L1": 1, "L2": 2, "L3": 3, "L4": 4, "L5": 5}
 REFINEMENTS: dict[str, set[str]] = {
     "date": {"date_of_birth"},
     "user_id": {"username", "email", "person"},
-    "postcode": {"address"},
 }
 # Whole-value layers: when they lose an overlap, keep the non-overlapping remainder (e.g. "Jane Doe <email>").
 _TRIMMABLE = {"L3", "manual"}
@@ -61,7 +60,7 @@ def merge(spans: list[Span], text: str) -> list[Span]:
             accepted.append(s)
             continue
         if s.type == "address" and all(
-            h.type == "postcode" and s.start <= h.start and h.end <= s.end for h in hits
+            h.type == "postcode" and s.start <= h.start and h.end <= s.end and s.length > h.length for h in hits
         ):
             accepted = [a for a in accepted if a not in hits] + [s]
             continue

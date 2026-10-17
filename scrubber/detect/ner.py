@@ -16,6 +16,10 @@ from .base import make_span
 from .keys import KeyDetector
 
 _LOCK = threading.Lock()
+_LOG_WORDS = {"INFO", "WARN", "WARNING", "ERROR", "DEBUG", "TRACE", "FATAL", "CRITICAL", "GET", "POST", "PUT",
+              "DELETE", "HTTP", "HTTPS", "JSON", "API", "URL", "ID", "OK"}
+_CAPITALISED_TYPES = {"person", "organisation", "location"}
+_NAME_SHAPE = re.compile(r"^(?:(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof)\.?\s+)?[A-Z][a-z]+(?:['\-][A-Z]?[a-z]+)*(?:\s+[A-Z][a-z]+(?:['\-][A-Z]?[a-z]+)*)*$")
 
 
 @lru_cache(maxsize=2)
@@ -109,6 +113,9 @@ class NerDetector:
                     s, e = self._tidy(text, s, e)
                     if e - s < 2:
                         continue
+                    type_ = self._sanity(text[s:e], type_)
+                    if type_ is None:
+                        continue
                     spans.append(
                         make_span(text, s, e, type_, self.layer, float(ent["score"]),
                                   f"GLiNER '{ent['label']}' (score {float(ent['score']):.2f})")
@@ -122,7 +129,21 @@ class NerDetector:
         return model.batch_predict_entities(texts, labels, threshold=threshold)  # older gliner
 
     @staticmethod
+    def _sanity(span_text: str, type_: str) -> str | None:
+        """Cheap English-text checks on model output. Returns the (possibly corrected) type or None."""
+        if span_text.upper() in _LOG_WORDS:
+            return None
+        if type_ in _CAPITALISED_TYPES and not any(c.isupper() for c in span_text):
+            return None  # "team", "db connect": proper names are capitalised
+        if type_ == "username" and _NAME_SHAPE.match(span_text):
+            return "person"  # "Geraldine", "Miss Hope": a name, not a handle
+        return type_
+
+    @staticmethod
     def _tidy(text: str, s: int, e: int) -> tuple[int, int]:
+        nl = text.find("\n", s, e)
+        if nl > s:  # entities do not cross line breaks ("Geraldine\nP.S")
+            e = nl
         while s < e and text[s] in " \t\r\n,;:\"'([{":
             s += 1
         while e > s and text[e - 1] in " \t\r\n,;:\"')]}.":

@@ -1,0 +1,7 @@
+[server]
+# The default file watcher walks every imported module, which trips over transformers' lazy imports.
+fileWatcherType = "none"
+headless = true
+
+[browser]
+gatherUsageStats = false

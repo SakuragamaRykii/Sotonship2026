@@ -153,6 +153,7 @@ def segment(text: str) -> list[Segment]:
         if in_json(m.start("value")):
             continue
         kv.append(Segment(start=m.start("value"), end=m.end("value"), kind="kv_value", key=normalise_key(m.group("key"))))
+        covered.append((m.start("key"), m.start("value")))  # the key itself is not free text
     for rx in (_INLINE_KV, _QUOTED_KV):
         for m in rx.finditer(text):
             group = next(
@@ -164,6 +165,7 @@ def segment(text: str) -> list[Segment]:
             if s == e:
                 continue
             kv.append(Segment(start=s, end=e, kind="kv_value", key=normalise_key(m.group("key"))))
+            covered.append((m.start(), s))
 
     # Drop exact duplicates (the same value found by two patterns).
     seen: set[tuple[int, int]] = set()

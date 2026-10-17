@@ -24,3 +24,4 @@ eval/results/*.raw.jsonl
 Thumbs.db
 .vscode/
 .idea/
+.claude/
