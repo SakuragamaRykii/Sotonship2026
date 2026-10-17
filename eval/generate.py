@@ -55,7 +55,8 @@ class Doc:
 
 
 class Gen:
-    def __init__(self, seed: int) -> None:
+    def __init__(self, seed: int, quasi: bool = False) -> None:
+        self.quasi = quasi  # inject quasi-identifier phrases (separate split, so other splits stay stable)
         self.rng = random.Random(seed)
         self.fake = Faker("en_GB")
         self.fake.seed_instance(seed)
@@ -144,6 +145,17 @@ class Gen:
             return rand(40, string.ascii_letters + string.digits + "_-")
         b64 = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).decode().rstrip("=")  # noqa: E731
         return f"{b64({'alg': 'HS256', 'typ': 'JWT'})}.{b64({'sub': rand(8), 'iat': r.randint(10**9, 2 * 10**9)})}.{rand(43, string.ascii_letters + string.digits + '_-')}"
+
+    def quasi_phrase(self) -> str:
+        r, f = self.rng, self.fake
+        return r.choice([
+            f"the only {r.choice(['female', 'male', 'Welsh-speaking', 'deaf'])} {r.choice(['professor', 'surgeon', 'pilot', 'nurse'])}"
+            f" in the {r.choice(['marine biology', 'cardiology', 'physics', 'neonatal'])} department at {f.company()}",
+            f"the person who won the {f.city()} half marathon in {r.randint(2015, 2024)}",
+            f"the one whose twin {r.choice(['brother', 'sister'])} works as a {f.job().lower()} in {f.city()}",
+            f"the youngest {r.choice(['headteacher', 'judge', 'councillor', 'consultant'])} ever appointed in {f.city()}",
+            f"the patient with {r.choice(['Fabry disease', 'acromegaly', 'situs inversus', 'Kawasaki disease'])} on Ward {r.randint(1, 30)}",
+        ])
 
     def password(self) -> str:
         r = self.rng
@@ -257,6 +269,9 @@ class Gen:
         colleague_f, colleague_l, _ = self.person()
         d.lit("My colleague ").pii(f"{colleague_f} {colleague_l}", "person").lit(" (").pii(self.email(colleague_f, colleague_l), "email")
         d.lit(") has the same problem.\n\n")
+        if self.quasi:
+            tags.append("quasi")
+            d.lit("For context, I am ").pii(self.quasi_phrase(), "quasi_identifier").lit(", so please be discreet.\n\n")
         if r.random() < 0.5:
             tags.append("url_secret")
             d.lit("Our staging config still has DATABASE_URL=mysql://").pii(f"{first.lower()}{last.lower()[:1]}", "username")
@@ -288,6 +303,9 @@ class Gen:
         d.lit(" in the ").pii(self.fake.city(), "location").lit(" office. ").pii(first, "person")
         d.lit(" reports to ").pii(" ".join(self.person()[:2]), "person").lit(" and was born on ").pii(dob, "date_of_birth")
         d.lit(". Payroll queries should go to ").pii(self.email(first, last), "email").lit(".\n")
+        if self.quasi:
+            tags.append("quasi")
+            d.lit("Note: the employee is ").pii(self.quasi_phrase(), "quasi_identifier").lit(".\n")
         if r.random() < 0.5:
             d.lit("Laptop asset tag: ").pii(self.fake.uuid4(), "uuid").lit(", last seen on ").pii(self.ip(), "ip").lit(".\n")
         task = r.choice([
@@ -298,9 +316,9 @@ class Gen:
         return d, task, tags
 
 
-def generate(n: int, seed: int, split: str) -> list[dict]:
-    g = Gen(seed)
-    kinds = ["log", "json", "prose", "document"]
+def generate(n: int, seed: int, split: str, quasi: bool = False) -> list[dict]:
+    g = Gen(seed, quasi=quasi)
+    kinds = ["prose", "document"] if quasi else ["log", "json", "prose", "document"]
     out = []
     for i in range(n):
         kind = kinds[i % len(kinds)]
@@ -322,9 +340,10 @@ def main() -> None:
     ap.add_argument("--n", type=int, default=200)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--quasi", action="store_true", help="prose/document items with quasi-identifier phrases")
     a = ap.parse_args()
     out = a.out or ROOT / "data" / f"{a.split}.jsonl"
-    rows = generate(a.n, a.seed, a.split)
+    rows = generate(a.n, a.seed, a.split, quasi=a.quasi)
     with open(out, "w", encoding="utf-8", newline="\n") as f:
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")

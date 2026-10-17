@@ -1,6 +1,6 @@
 # Evaluation results
 
-Run `20261017-160537`. All data is synthetic (Faker `en_GB` templates; see `eval/generate.py`).
+Run `20261017-161830`. All data is synthetic (Faker `en_GB` templates; see `eval/generate.py`).
 Leakage = fraction of ground-truth sensitive strings found (case-insensitive substring) in the payload
 actually logged to `logs/payloads/`. Dates, organisations and locations are kept by the balanced policy
 and excluded from leakage (they are still scored in the span tables).
@@ -14,11 +14,11 @@ Sensitive strings per system: n = 3410; secrets: n = 116.
 | system | mode | leakage rate | leaked / n | secret leaks | latency (ms / 1k chars) | echo re-hydration (n) |
 |---|---|---|---|---|---|---|
 | raw | - | 100.0% | 3410 / 3410 | **116** / 116 | 0.0 | — (0) |
-| presidio | - | 21.5% | 733 / 3410 | **97** / 116 | 102.5 | — (0) |
-| regex | balanced | 13.9% | 475 / 3410 | **0** / 116 | 4.3 | 100.0% (2306) |
-| regex | strict | 13.9% | 473 / 3410 | **0** / 116 | 2.2 | 100.0% (1912) |
-| full | balanced | 0.5% | 16 / 3410 | **0** / 116 | 847.3 | 100.0% (2765) |
-| full | strict | 0.3% | 9 / 3410 | **0** / 116 | 844.1 | 100.0% (2376) |
+| presidio | - | 21.5% | 733 / 3410 | **97** / 116 | 114.8 | — (0) |
+| regex | balanced | 13.9% | 475 / 3410 | **0** / 116 | 4.6 | 100.0% (2306) |
+| regex | strict | 13.9% | 473 / 3410 | **0** / 116 | 2.3 | 100.0% (1912) |
+| full | balanced | 0.5% | 16 / 3410 | **0** / 116 | 1666.0 | 100.0% (2765) |
+| full | strict | 0.3% | 9 / 3410 | **0** / 116 | 1658.8 | 100.0% (2376) |
 
 ### Detection (micro-averaged)
 

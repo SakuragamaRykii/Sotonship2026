@@ -27,7 +27,7 @@ from scrubber.vault import Session
 from . import metrics as M
 
 ROOT = Path(__file__).resolve().parent.parent
-OURS = {"regex": ["L1", "L2", "L3"], "full": ["L1", "L2", "L3", "L4"]}
+OURS = {"regex": ["L1", "L2", "L3"], "full": ["L1", "L2", "L3", "L4"], "full_l5": ["L1", "L2", "L3", "L4", "L5"]}
 UTILITY_SYSTEMS = {"raw", "presidio", "full"}
 PROMPT = (
     "Answer the question using only the text below. Reply with just the answer, no explanation.\n"

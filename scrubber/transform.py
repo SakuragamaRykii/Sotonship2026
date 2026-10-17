@@ -70,16 +70,16 @@ def _pattern(value: str, type_: str) -> re.Pattern[str]:
     return re.compile(lead + "(?:" + "|".join(parts) + ")" + trail, flags)
 
 
-_CAP_LEFT = re.compile(r"([A-Z][a-z]+(?:['\-][A-Z]?[a-z]+)*) $")
+_CAP_LEFT = re.compile(r"(?<![\w'\-])([A-Z][a-z]+(?:['\-][A-Z]?[a-z]+)*) $")
 _CAP_RIGHT = re.compile(r" ([A-Z][a-z]+(?:['\-][A-Z]?[a-z]+)*)(?![\w'])")
 _NOT_NAMES = {"called", "dear", "hi", "hello", "thanks", "spoke", "contact", "customer", "regards", "from", "to",
               "with", "and", "summary", "note", "notes", "please", "ask", "tell", "email", "phone", "user", "client"}
 
 
-def _extend_name(scrubbed: str, s: int, e: int, roles: set[str], rep: str, vault, text: str) -> tuple[int, int, str]:
+def _extend_name(scrubbed: str, s: int, e: int, roles: set[str]) -> tuple[int, int]:
     """If a known surname is preceded by another capitalised word (or a known first name is
     followed by one), the mention is a different full name ("Georgina Preston" when we know
-    "Joshua Preston"): pseudonymise the whole name as its own person instead."""
+    "Joshua Preston"): return the bounds of that whole name so it gets its own surrogate."""
     ns, ne = s, e
     if "last" in roles:
         m = _CAP_LEFT.search(scrubbed, max(0, s - 40), s)
@@ -89,10 +89,7 @@ def _extend_name(scrubbed: str, s: int, e: int, roles: set[str], rep: str, vault
         m = _CAP_RIGHT.match(scrubbed, e)
         if m and m.group(1).lower() not in _NOT_NAMES | _NAME_STOPWORDS:
             ne = m.end(1)
-    if (ns, ne) == (s, e):
-        return s, e, rep
-    full = scrubbed[ns:ne]
-    return ns, ne, vault.pseudonymise("person", full, text)
+    return ns, ne
 
 
 def apply_spans(
@@ -176,13 +173,13 @@ def apply_spans(
             rep, type_ = candidates[value]
             for m in _pattern(value, type_).finditer(scrubbed):
                 s, e = m.span()
-                hit_rep = rep
                 if value in roles:  # a lone name token: is it part of a *different* full name?
-                    s, e, hit_rep = _extend_name(scrubbed, s, e, roles[value], rep, vault, text)
+                    s, e = _extend_name(scrubbed, s, e, roles[value])
                 if any(s < re_ and rs < e for rs, re_ in regions):
                     continue
                 if any(s < he and hs < e for hs, he, _, _ in hits):
                     continue
+                hit_rep = rep if (s, e) == m.span() else vault.pseudonymise("person", scrubbed[s:e], text)
                 hits.append((s, e, hit_rep, type_))
         if not hits:
             break

@@ -48,3 +48,10 @@ def test_entity_linking():
     # ambiguity is not linked
     known[name_tokens("John Doe")] = "Person_3"
     assert link_person(name_tokens("Doe"), known) is None
+
+
+def test_quasi_identifier_absorbs_org_inside_it():
+    text = "I am the only deaf nurse in cardiology at Acme Ltd, thanks"
+    qi = "the only deaf nurse in cardiology at Acme Ltd"
+    out = merge([sp(text, "Acme Ltd", "organisation", "L4"), sp(text, qi, "quasi_identifier", "L5")], text)
+    assert [(s.type, s.text) for s in out] == [("quasi_identifier", qi)]

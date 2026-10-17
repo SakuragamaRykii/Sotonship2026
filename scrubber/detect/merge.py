@@ -13,6 +13,13 @@ REFINEMENTS: dict[str, set[str]] = {
     "date": {"date_of_birth"},
     "user_id": {"username", "email", "person"},
 }
+# A longer span of these types replaces higher-priority spans it strictly contains, when all of
+# them are of the listed types: an address absorbs its postcode; a quasi-identifier phrase
+# ("the only nurse in the cardiology department at Acme Ltd") absorbs the organisation/place in it.
+CONTAINERS: dict[str, set[str]] = {
+    "address": {"postcode"},
+    "quasi_identifier": {"organisation", "location", "date"},
+}
 # Whole-value layers: when they lose an overlap, keep the non-overlapping remainder (e.g. "Jane Doe <email>").
 _TRIMMABLE = {"L3", "manual"}
 _SEPARATORS = " \t\r\n,;:|<>()[]{}\"'/"
@@ -48,7 +55,7 @@ def merge(spans: list[Span], text: str) -> list[Span]:
     """Choose a non-overlapping set of spans.
 
     Priority L1 > L2 > L3 > L4 > L5; at equal priority the longer span, then higher confidence.
-    Exceptions: an address that contains only postcode spans replaces them, and a lower-priority
+    Exceptions: a container span (see CONTAINERS) replaces the spans it contains, and a lower-priority
     span covering exactly the same text may refine the type (date → date_of_birth).
     """
     accepted: list[Span] = []
@@ -59,8 +66,9 @@ def merge(spans: list[Span], text: str) -> list[Span]:
         if not hits:
             accepted.append(s)
             continue
-        if s.type == "address" and all(
-            h.type == "postcode" and s.start <= h.start and h.end <= s.end and s.length > h.length for h in hits
+        swallow = CONTAINERS.get(s.type, set())
+        if swallow and all(
+            h.type in swallow and s.start <= h.start and h.end <= s.end and s.length > h.length for h in hits
         ):
             accepted = [a for a in accepted if a not in hits] + [s]
             continue

@@ -103,3 +103,34 @@ def test_real_gliner_finds_person_in_free_text():
     text = "Spoke to Priya Natarajan from Northwind Ltd about the refund."
     got = {(s.type, s.text) for s in det.detect(text, segment(text))}
     assert ("person", "Priya Natarajan") in got
+
+
+def test_l5_quasi_identifiers_flag_in_balanced_generalise_in_strict(monkeypatch):
+    import httpx
+
+    from scrubber.detect.llm import LlmQuasiDetector
+
+    qi = "the only female professor of marine biology"
+
+    def fake_post(url, json=None, timeout=None):  # noqa: A002
+        assert url.startswith("http://localhost")
+        body = '{"spans": [{"text": "%s", "reason": "unique role"}]}' % qi
+        return httpx.Response(200, json={"response": body}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    sc = Scrubber(["L1", "L2", "L3"])
+    sc.detectors.append(LlmQuasiDetector())
+    text = f"Our client is {qi} at the university."
+    rb = sc.scrub(text, Session(), "balanced")
+    assert qi in rb.scrubbed_text and any("quasi_identifier" in w for w in rb.report["warnings"])
+    rs = sc.scrub(text, Session(), "strict")
+    assert qi not in rs.scrubbed_text and "[DETAIL_REDACTED]" in rs.scrubbed_text
+
+
+def test_l5_refuses_remote_host(monkeypatch):
+    from scrubber.detect.llm import LlmQuasiDetector
+
+    monkeypatch.setenv("OLLAMA_HOST", "http://203.0.113.9:11434")
+    monkeypatch.delenv("SCRUBBER_ALLOW_REMOTE_OLLAMA", raising=False)
+    det = LlmQuasiDetector()
+    assert det.detect("some text", []) == [] and "not local" in det.warnings[0]
