@@ -192,7 +192,48 @@ Systems: `raw` (no scrubbing), `presidio` (AnalyzerEngine + AnonymizerEngine def
 `en_core_web_lg`), `regex` (L1–L3), `full` (L1–L4), `full_l5` (L1–L5). Results are written to
 `eval/results/results.md` and `results.csv`; every table states its sample sizes.
 
-RESULTS_PLACEHOLDER
+### Headline results
+
+Full tables: [eval/results/results.md](eval/results/results.md) (test split),
+[eval/results/utility/results.md](eval/results/utility/results.md) (utility),
+[eval/results/quasi/results.md](eval/results/quasi/results.md) (quasi-identifiers / L5).
+
+**Test split, n = 300 items, 3,410 sensitive strings (116 secrets):**
+
+| system | mode | leakage | secret leaks | typed F1 (overlap) | latency ms / 1k chars* |
+|---|---|---|---|---|---|
+| raw | – | 100% | 116 / 116 | – | 0 |
+| presidio | – | 21.5% | 97 / 116 | 0.550 | 206 |
+| regex (L1–L3) | balanced | 13.9% | **0** / 116 | 0.829 | 8 |
+| full (L1–L4) | balanced | **0.5%** | **0** / 116 | **0.921** | 1,350 |
+| full (L1–L4) | strict | 0.3% | **0** / 116 | 0.921 | 1,345 |
+
+Echo re-hydration (scrub, then re-hydrate the scrubbed text itself) restores 100% of protected
+pseudonymised values for both of our systems (n = 2,765 for full / balanced).
+
+**Utility, first 90 test items, n = 58 tasks, answered by a local `qwen3:8b` via Ollama:**
+
+| system | answer accuracy | re-hydration accuracy (n surrogates) |
+|---|---|---|
+| raw | 98.3% | – |
+| presidio | 15.5% | – |
+| full / balanced | **86.2%** | 100% (40) |
+
+Of the 8 tasks `full` lost, 3 ask for a birth year (generalised to an age band by policy) and 3 ask
+for a company named after people ("Marsh, Edwards and Jones"), which NER splits into persons.
+
+**Quasi-identifier split, n = 40 items, 465 sensitive strings (40 quasi-identifier phrases):**
+
+| system | balanced leakage | strict leakage | L5 latency ms / 1k chars* |
+|---|---|---|---|
+| presidio | 9.5% | – | – |
+| full (L1–L4) | 8.4% | 3.7% | – |
+| full_l5 (L1–L5, qwen3:8b) | 8.4% | **0.2%** | ~48,000 |
+
+L5 finds 95% of the quasi-identifier phrases. In balanced mode they are only flagged for review
+(kept in the text), so balanced leakage does not change; strict mode generalises them.
+
+\* Latency is wall-clock on a laptop CPU and varies with load; compare systems within a run.
 
 Datasets (all synthetic, Faker `en_GB`, every line has `"synthetic": true`):
 
@@ -220,7 +261,11 @@ values rather than to new text shapes. The hand-written split is the real genera
   "Jane Doe" if the session also saw "Jane Doe".
 - Name-token propagation can over-replace a capitalised word that is also someone's name (e.g. the
   surname "Hall" in "Hall B"). Common words are on a stop-list.
-- L4 is slow on CPU (roughly 1 s per 1k characters); L1–L3 alone are about 200× faster.
+- L4 is slow on CPU (roughly 1–1.5 s per 1k characters); L1–L3 alone are over 100× faster. L5 on a
+  local 8B model is slower still and is off by default.
+- Company names made of surnames ("Marsh, Edwards and Jones") are often pseudonymised as people.
+- Leakage is measured as exact (case-insensitive) substring presence, so a phrase that is only
+  partly masked counts as not leaked; the per-type tables show where that matters.
 
 ## Repo layout
 

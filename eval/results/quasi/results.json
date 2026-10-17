@@ -1,0 +1,1974 @@
+[
+ {
+  "dataset": "data\\quasi.jsonl",
+  "n_items": 40,
+  "systems": {
+   "presidio|-": {
+    "system": "presidio",
+    "mode": "-",
+    "leakage": {
+     "leakage_rate": 0.09462365591397849,
+     "n_strings": 465,
+     "n_leaked": 44,
+     "secret_leaks": 6,
+     "n_secrets": 8,
+     "per_type": {
+      "person": {
+       "rate": 0.06875,
+       "n": 160,
+       "leaked": 11
+      },
+      "email": {
+       "rate": 0.0,
+       "n": 60,
+       "leaked": 0
+      },
+      "phone": {
+       "rate": 0.0,
+       "n": 40,
+       "leaked": 0
+      },
+      "quasi_identifier": {
+       "rate": 0.175,
+       "n": 40,
+       "leaked": 7
+      },
+      "username": {
+       "rate": 0.875,
+       "n": 8,
+       "leaked": 7
+      },
+      "secret": {
+       "rate": 0.75,
+       "n": 8,
+       "leaked": 6
+      },
+      "ip": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "date_of_birth": {
+       "rate": 0.05,
+       "n": 40,
+       "leaked": 2
+      },
+      "address": {
+       "rate": 0.1,
+       "n": 20,
+       "leaked": 2
+      },
+      "ni_number": {
+       "rate": 0.2,
+       "n": 20,
+       "leaked": 4
+      },
+      "iban": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "uuid": {
+       "rate": 0.4166666666666667,
+       "n": 12,
+       "leaked": 5
+      },
+      "card": {
+       "rate": 0.0,
+       "n": 7,
+       "leaked": 0
+      },
+      "nhs_number": {
+       "rate": 0.0,
+       "n": 10,
+       "leaked": 0
+      }
+     },
+     "per_tag": {
+      "email_tag": {
+       "rate": 0.14,
+       "n": 50,
+       "leaked": 7
+      },
+      "name_variants": {
+       "rate": 0.09462365591397849,
+       "n": 465,
+       "leaked": 44
+      },
+      "quasi": {
+       "rate": 0.09462365591397849,
+       "n": 465,
+       "leaked": 44
+      },
+      "url_secret": {
+       "rate": 0.23404255319148937,
+       "n": 94,
+       "leaked": 22
+      }
+     }
+    },
+    "spans_overlap": {
+     "ALL": {
+      "precision": 0.503725782414307,
+      "recall": 0.618348623853211,
+      "f1": 0.5551826913000778,
+      "n_pred": 671,
+      "n_gold": 545
+     },
+     "person": {
+      "precision": 0.7110091743119266,
+      "recall": 0.96875,
+      "f1": 0.8201058201058201,
+      "n_pred": 218,
+      "n_gold": 160
+     },
+     "organisation": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 40
+     },
+     "email": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 60,
+      "n_gold": 60
+     },
+     "phone": {
+      "precision": 0.7222222222222222,
+      "recall": 0.975,
+      "f1": 0.8297872340425532,
+      "n_pred": 54,
+      "n_gold": 40
+     },
+     "quasi_identifier": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 40
+     },
+     "username": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 8
+     },
+     "secret": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 8
+     },
+     "ip": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "date": {
+      "precision": 0.17647058823529413,
+      "recall": 0.85,
+      "f1": 0.2922636103151863,
+      "n_pred": 102,
+      "n_gold": 20
+     },
+     "url": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 68,
+      "n_gold": 0
+     },
+     "us_driver_license": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 54,
+      "n_gold": 0
+     },
+     "ANY": {
+      "precision": 1.0,
+      "recall": 0.8752293577981651,
+      "f1": 0.9334637964774951,
+      "n_pred": 671,
+      "n_gold": 545
+     },
+     "date_of_birth": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 40
+     },
+     "address": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 20
+     },
+     "ni_number": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 20
+     },
+     "iban": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "location": {
+      "precision": 0.3142857142857143,
+      "recall": 0.55,
+      "f1": 0.4,
+      "n_pred": 35,
+      "n_gold": 20
+     },
+     "uuid": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 12
+     },
+     "us_bank_number": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 20,
+      "n_gold": 0
+     },
+     "card": {
+      "precision": 1.0,
+      "recall": 0.7142857142857143,
+      "f1": 0.8333333333333333,
+      "n_pred": 5,
+      "n_gold": 7
+     },
+     "nhs_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 10,
+      "n_gold": 10
+     },
+     "nrp": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 5,
+      "n_gold": 0
+     }
+    },
+    "spans_exact": {
+     "ALL": {
+      "precision": 0.46199701937406856,
+      "recall": 0.5688073394495413,
+      "f1": 0.5098684210526316,
+      "n_pred": 671,
+      "n_gold": 545
+     },
+     "person": {
+      "precision": 0.5871559633027523,
+      "recall": 0.8,
+      "f1": 0.6772486772486772,
+      "n_pred": 218,
+      "n_gold": 160
+     },
+     "organisation": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 40
+     },
+     "email": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 60,
+      "n_gold": 60
+     },
+     "phone": {
+      "precision": 0.7222222222222222,
+      "recall": 0.975,
+      "f1": 0.8297872340425532,
+      "n_pred": 54,
+      "n_gold": 40
+     },
+     "quasi_identifier": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 40
+     },
+     "username": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 8
+     },
+     "secret": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 8
+     },
+     "ip": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "date": {
+      "precision": 0.16666666666666666,
+      "recall": 0.85,
+      "f1": 0.27868852459016397,
+      "n_pred": 102,
+      "n_gold": 20
+     },
+     "url": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 68,
+      "n_gold": 0
+     },
+     "us_driver_license": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 54,
+      "n_gold": 0
+     },
+     "ANY": {
+      "precision": 0.6423248882265276,
+      "recall": 0.671559633027523,
+      "f1": 0.6566170150328525,
+      "n_pred": 671,
+      "n_gold": 545
+     },
+     "date_of_birth": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 40
+     },
+     "address": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 20
+     },
+     "ni_number": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 20
+     },
+     "iban": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "location": {
+      "precision": 0.3142857142857143,
+      "recall": 0.55,
+      "f1": 0.4,
+      "n_pred": 35,
+      "n_gold": 20
+     },
+     "uuid": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 12
+     },
+     "us_bank_number": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 20,
+      "n_gold": 0
+     },
+     "card": {
+      "precision": 1.0,
+      "recall": 0.7142857142857143,
+      "f1": 0.8333333333333333,
+      "n_pred": 5,
+      "n_gold": 7
+     },
+     "nhs_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 10,
+      "n_gold": 10
+     },
+     "nrp": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 5,
+      "n_gold": 0
+     }
+    },
+    "latency_ms_per_1k": 882.1598640432927,
+    "echo_rehydration": null,
+    "echo_n": 0,
+    "utility": null,
+    "utility_n": 0,
+    "rehydration_acc": null,
+    "rehydration_n": 0
+   },
+   "full|balanced": {
+    "system": "full",
+    "mode": "balanced",
+    "leakage": {
+     "leakage_rate": 0.08387096774193549,
+     "n_strings": 465,
+     "n_leaked": 39,
+     "secret_leaks": 0,
+     "n_secrets": 8,
+     "per_type": {
+      "person": {
+       "rate": 0.0125,
+       "n": 160,
+       "leaked": 2
+      },
+      "email": {
+       "rate": 0.0,
+       "n": 60,
+       "leaked": 0
+      },
+      "phone": {
+       "rate": 0.0,
+       "n": 40,
+       "leaked": 0
+      },
+      "quasi_identifier": {
+       "rate": 0.925,
+       "n": 40,
+       "leaked": 37
+      },
+      "username": {
+       "rate": 0.0,
+       "n": 8,
+       "leaked": 0
+      },
+      "secret": {
+       "rate": 0.0,
+       "n": 8,
+       "leaked": 0
+      },
+      "ip": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "date_of_birth": {
+       "rate": 0.0,
+       "n": 40,
+       "leaked": 0
+      },
+      "address": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "ni_number": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "iban": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "uuid": {
+       "rate": 0.0,
+       "n": 12,
+       "leaked": 0
+      },
+      "card": {
+       "rate": 0.0,
+       "n": 7,
+       "leaked": 0
+      },
+      "nhs_number": {
+       "rate": 0.0,
+       "n": 10,
+       "leaked": 0
+      }
+     },
+     "per_tag": {
+      "email_tag": {
+       "rate": 0.1,
+       "n": 50,
+       "leaked": 5
+      },
+      "name_variants": {
+       "rate": 0.08387096774193549,
+       "n": 465,
+       "leaked": 39
+      },
+      "quasi": {
+       "rate": 0.08387096774193549,
+       "n": 465,
+       "leaked": 39
+      },
+      "url_secret": {
+       "rate": 0.0851063829787234,
+       "n": 94,
+       "leaked": 8
+      }
+     }
+    },
+    "spans_overlap": {
+     "ALL": {
+      "precision": 0.84375,
+      "recall": 0.7926605504587156,
+      "f1": 0.8174077578051088,
+      "n_pred": 512,
+      "n_gold": 545
+     },
+     "person": {
+      "precision": 0.8333333333333334,
+      "recall": 0.8125,
+      "f1": 0.8227848101265822,
+      "n_pred": 156,
+      "n_gold": 160
+     },
+     "organisation": {
+      "precision": 0.37777777777777777,
+      "recall": 0.425,
+      "f1": 0.3999999999999999,
+      "n_pred": 45,
+      "n_gold": 40
+     },
+     "email": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 60,
+      "n_gold": 60
+     },
+     "phone": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 40,
+      "n_gold": 40
+     },
+     "quasi_identifier": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 40
+     },
+     "username": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 8,
+      "n_gold": 8
+     },
+     "secret": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 8,
+      "n_gold": 8
+     },
+     "ip": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 26,
+      "n_gold": 20
+     },
+     "ANY": {
+      "precision": 0.9921875,
+      "recall": 0.9009174311926605,
+      "f1": 0.9443523166973339,
+      "n_pred": 512,
+      "n_gold": 545
+     },
+     "date_of_birth": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 40,
+      "n_gold": 40
+     },
+     "address": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "ni_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "iban": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "date": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "uuid": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 12,
+      "n_gold": 12
+     },
+     "card": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 7,
+      "n_gold": 7
+     },
+     "nhs_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 10,
+      "n_gold": 10
+     }
+    },
+    "spans_exact": {
+     "ALL": {
+      "precision": 0.787109375,
+      "recall": 0.7394495412844037,
+      "f1": 0.7625354777672658,
+      "n_pred": 512,
+      "n_gold": 545
+     },
+     "person": {
+      "precision": 0.6474358974358975,
+      "recall": 0.63125,
+      "f1": 0.639240506329114,
+      "n_pred": 156,
+      "n_gold": 160
+     },
+     "organisation": {
+      "precision": 0.37777777777777777,
+      "recall": 0.425,
+      "f1": 0.3999999999999999,
+      "n_pred": 45,
+      "n_gold": 40
+     },
+     "email": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 60,
+      "n_gold": 60
+     },
+     "phone": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 40,
+      "n_gold": 40
+     },
+     "quasi_identifier": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 40
+     },
+     "username": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 8,
+      "n_gold": 8
+     },
+     "secret": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 8,
+      "n_gold": 8
+     },
+     "ip": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 26,
+      "n_gold": 20
+     },
+     "ANY": {
+      "precision": 0.810546875,
+      "recall": 0.7614678899082569,
+      "f1": 0.7852412488174076,
+      "n_pred": 512,
+      "n_gold": 545
+     },
+     "date_of_birth": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 40,
+      "n_gold": 40
+     },
+     "address": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "ni_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "iban": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "date": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "uuid": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 12,
+      "n_gold": 12
+     },
+     "card": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 7,
+      "n_gold": 7
+     },
+     "nhs_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 10,
+      "n_gold": 10
+     }
+    },
+    "latency_ms_per_1k": 1149.5511667203084,
+    "echo_rehydration": 1.0,
+    "echo_n": 318,
+    "utility": null,
+    "utility_n": 0,
+    "rehydration_acc": null,
+    "rehydration_n": 0
+   },
+   "full|strict": {
+    "system": "full",
+    "mode": "strict",
+    "leakage": {
+     "leakage_rate": 0.03655913978494624,
+     "n_strings": 465,
+     "n_leaked": 17,
+     "secret_leaks": 0,
+     "n_secrets": 8,
+     "per_type": {
+      "person": {
+       "rate": 0.00625,
+       "n": 160,
+       "leaked": 1
+      },
+      "email": {
+       "rate": 0.0,
+       "n": 60,
+       "leaked": 0
+      },
+      "phone": {
+       "rate": 0.0,
+       "n": 40,
+       "leaked": 0
+      },
+      "quasi_identifier": {
+       "rate": 0.4,
+       "n": 40,
+       "leaked": 16
+      },
+      "username": {
+       "rate": 0.0,
+       "n": 8,
+       "leaked": 0
+      },
+      "secret": {
+       "rate": 0.0,
+       "n": 8,
+       "leaked": 0
+      },
+      "ip": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "date_of_birth": {
+       "rate": 0.0,
+       "n": 40,
+       "leaked": 0
+      },
+      "address": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "ni_number": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "iban": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "uuid": {
+       "rate": 0.0,
+       "n": 12,
+       "leaked": 0
+      },
+      "card": {
+       "rate": 0.0,
+       "n": 7,
+       "leaked": 0
+      },
+      "nhs_number": {
+       "rate": 0.0,
+       "n": 10,
+       "leaked": 0
+      }
+     },
+     "per_tag": {
+      "email_tag": {
+       "rate": 0.06,
+       "n": 50,
+       "leaked": 3
+      },
+      "name_variants": {
+       "rate": 0.03655913978494624,
+       "n": 465,
+       "leaked": 17
+      },
+      "quasi": {
+       "rate": 0.03655913978494624,
+       "n": 465,
+       "leaked": 17
+      },
+      "url_secret": {
+       "rate": 0.06382978723404255,
+       "n": 94,
+       "leaked": 6
+      }
+     }
+    },
+    "spans_overlap": {
+     "ALL": {
+      "precision": 0.84375,
+      "recall": 0.7926605504587156,
+      "f1": 0.8174077578051088,
+      "n_pred": 512,
+      "n_gold": 545
+     },
+     "person": {
+      "precision": 0.8333333333333334,
+      "recall": 0.8125,
+      "f1": 0.8227848101265822,
+      "n_pred": 156,
+      "n_gold": 160
+     },
+     "organisation": {
+      "precision": 0.37777777777777777,
+      "recall": 0.425,
+      "f1": 0.3999999999999999,
+      "n_pred": 45,
+      "n_gold": 40
+     },
+     "email": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 60,
+      "n_gold": 60
+     },
+     "phone": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 40,
+      "n_gold": 40
+     },
+     "quasi_identifier": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 40
+     },
+     "username": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 8,
+      "n_gold": 8
+     },
+     "secret": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 8,
+      "n_gold": 8
+     },
+     "ip": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 26,
+      "n_gold": 20
+     },
+     "ANY": {
+      "precision": 0.9921875,
+      "recall": 0.9009174311926605,
+      "f1": 0.9443523166973339,
+      "n_pred": 512,
+      "n_gold": 545
+     },
+     "date_of_birth": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 40,
+      "n_gold": 40
+     },
+     "address": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "ni_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "iban": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "date": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "uuid": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 12,
+      "n_gold": 12
+     },
+     "card": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 7,
+      "n_gold": 7
+     },
+     "nhs_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 10,
+      "n_gold": 10
+     }
+    },
+    "spans_exact": {
+     "ALL": {
+      "precision": 0.787109375,
+      "recall": 0.7394495412844037,
+      "f1": 0.7625354777672658,
+      "n_pred": 512,
+      "n_gold": 545
+     },
+     "person": {
+      "precision": 0.6474358974358975,
+      "recall": 0.63125,
+      "f1": 0.639240506329114,
+      "n_pred": 156,
+      "n_gold": 160
+     },
+     "organisation": {
+      "precision": 0.37777777777777777,
+      "recall": 0.425,
+      "f1": 0.3999999999999999,
+      "n_pred": 45,
+      "n_gold": 40
+     },
+     "email": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 60,
+      "n_gold": 60
+     },
+     "phone": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 40,
+      "n_gold": 40
+     },
+     "quasi_identifier": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 0,
+      "n_gold": 40
+     },
+     "username": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 8,
+      "n_gold": 8
+     },
+     "secret": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 8,
+      "n_gold": 8
+     },
+     "ip": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 26,
+      "n_gold": 20
+     },
+     "ANY": {
+      "precision": 0.810546875,
+      "recall": 0.7614678899082569,
+      "f1": 0.7852412488174076,
+      "n_pred": 512,
+      "n_gold": 545
+     },
+     "date_of_birth": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 40,
+      "n_gold": 40
+     },
+     "address": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "ni_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "iban": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "date": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "uuid": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 12,
+      "n_gold": 12
+     },
+     "card": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 7,
+      "n_gold": 7
+     },
+     "nhs_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 10,
+      "n_gold": 10
+     }
+    },
+    "latency_ms_per_1k": 1146.8576848975215,
+    "echo_rehydration": 1.0,
+    "echo_n": 299,
+    "utility": null,
+    "utility_n": 0,
+    "rehydration_acc": null,
+    "rehydration_n": 0
+   },
+   "full_l5|balanced": {
+    "system": "full_l5",
+    "mode": "balanced",
+    "leakage": {
+     "leakage_rate": 0.08387096774193549,
+     "n_strings": 465,
+     "n_leaked": 39,
+     "secret_leaks": 0,
+     "n_secrets": 8,
+     "per_type": {
+      "person": {
+       "rate": 0.0125,
+       "n": 160,
+       "leaked": 2
+      },
+      "email": {
+       "rate": 0.0,
+       "n": 60,
+       "leaked": 0
+      },
+      "phone": {
+       "rate": 0.0,
+       "n": 40,
+       "leaked": 0
+      },
+      "quasi_identifier": {
+       "rate": 0.925,
+       "n": 40,
+       "leaked": 37
+      },
+      "username": {
+       "rate": 0.0,
+       "n": 8,
+       "leaked": 0
+      },
+      "secret": {
+       "rate": 0.0,
+       "n": 8,
+       "leaked": 0
+      },
+      "ip": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "date_of_birth": {
+       "rate": 0.0,
+       "n": 40,
+       "leaked": 0
+      },
+      "address": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "ni_number": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "iban": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "uuid": {
+       "rate": 0.0,
+       "n": 12,
+       "leaked": 0
+      },
+      "card": {
+       "rate": 0.0,
+       "n": 7,
+       "leaked": 0
+      },
+      "nhs_number": {
+       "rate": 0.0,
+       "n": 10,
+       "leaked": 0
+      }
+     },
+     "per_tag": {
+      "email_tag": {
+       "rate": 0.1,
+       "n": 50,
+       "leaked": 5
+      },
+      "name_variants": {
+       "rate": 0.08387096774193549,
+       "n": 465,
+       "leaked": 39
+      },
+      "quasi": {
+       "rate": 0.08387096774193549,
+       "n": 465,
+       "leaked": 39
+      },
+      "url_secret": {
+       "rate": 0.0851063829787234,
+       "n": 94,
+       "leaked": 8
+      }
+     }
+    },
+    "spans_overlap": {
+     "ALL": {
+      "precision": 0.8678899082568807,
+      "recall": 0.8623853211009175,
+      "f1": 0.8651288587078132,
+      "n_pred": 545,
+      "n_gold": 545
+     },
+     "person": {
+      "precision": 0.8333333333333334,
+      "recall": 0.8125,
+      "f1": 0.8227848101265822,
+      "n_pred": 156,
+      "n_gold": 160
+     },
+     "organisation": {
+      "precision": 0.4473684210526316,
+      "recall": 0.425,
+      "f1": 0.4358974358974359,
+      "n_pred": 38,
+      "n_gold": 40
+     },
+     "email": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 60,
+      "n_gold": 60
+     },
+     "phone": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 40,
+      "n_gold": 40
+     },
+     "quasi_identifier": {
+      "precision": 0.7735849056603774,
+      "recall": 0.95,
+      "f1": 0.8527640941434045,
+      "n_pred": 53,
+      "n_gold": 40
+     },
+     "username": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 8,
+      "n_gold": 8
+     },
+     "secret": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 8,
+      "n_gold": 8
+     },
+     "ip": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 13,
+      "n_gold": 20
+     },
+     "ANY": {
+      "precision": 0.9871559633027523,
+      "recall": 0.9467889908256881,
+      "f1": 0.9665511898751806,
+      "n_pred": 545,
+      "n_gold": 545
+     },
+     "date_of_birth": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 40,
+      "n_gold": 40
+     },
+     "address": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "ni_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "iban": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "date": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "uuid": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 12,
+      "n_gold": 12
+     },
+     "card": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 7,
+      "n_gold": 7
+     },
+     "nhs_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 10,
+      "n_gold": 10
+     }
+    },
+    "spans_exact": {
+     "ALL": {
+      "precision": 0.7926605504587156,
+      "recall": 0.7926605504587156,
+      "f1": 0.7926605504587156,
+      "n_pred": 545,
+      "n_gold": 545
+     },
+     "person": {
+      "precision": 0.6474358974358975,
+      "recall": 0.63125,
+      "f1": 0.639240506329114,
+      "n_pred": 156,
+      "n_gold": 160
+     },
+     "organisation": {
+      "precision": 0.4473684210526316,
+      "recall": 0.425,
+      "f1": 0.4358974358974359,
+      "n_pred": 38,
+      "n_gold": 40
+     },
+     "email": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 60,
+      "n_gold": 60
+     },
+     "phone": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 40,
+      "n_gold": 40
+     },
+     "quasi_identifier": {
+      "precision": 0.5471698113207547,
+      "recall": 0.725,
+      "f1": 0.6236559139784946,
+      "n_pred": 53,
+      "n_gold": 40
+     },
+     "username": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 8,
+      "n_gold": 8
+     },
+     "secret": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 8,
+      "n_gold": 8
+     },
+     "ip": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 13,
+      "n_gold": 20
+     },
+     "ANY": {
+      "precision": 0.8165137614678899,
+      "recall": 0.8165137614678899,
+      "f1": 0.81651376146789,
+      "n_pred": 545,
+      "n_gold": 545
+     },
+     "date_of_birth": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 40,
+      "n_gold": 40
+     },
+     "address": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "ni_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "iban": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "date": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "uuid": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 12,
+      "n_gold": 12
+     },
+     "card": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 7,
+      "n_gold": 7
+     },
+     "nhs_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 10,
+      "n_gold": 10
+     }
+    },
+    "latency_ms_per_1k": 47928.88968758469,
+    "echo_rehydration": 1.0,
+    "echo_n": 318,
+    "utility": null,
+    "utility_n": 0,
+    "rehydration_acc": null,
+    "rehydration_n": 0
+   },
+   "full_l5|strict": {
+    "system": "full_l5",
+    "mode": "strict",
+    "leakage": {
+     "leakage_rate": 0.002150537634408602,
+     "n_strings": 465,
+     "n_leaked": 1,
+     "secret_leaks": 0,
+     "n_secrets": 8,
+     "per_type": {
+      "person": {
+       "rate": 0.00625,
+       "n": 160,
+       "leaked": 1
+      },
+      "email": {
+       "rate": 0.0,
+       "n": 60,
+       "leaked": 0
+      },
+      "phone": {
+       "rate": 0.0,
+       "n": 40,
+       "leaked": 0
+      },
+      "quasi_identifier": {
+       "rate": 0.0,
+       "n": 40,
+       "leaked": 0
+      },
+      "username": {
+       "rate": 0.0,
+       "n": 8,
+       "leaked": 0
+      },
+      "secret": {
+       "rate": 0.0,
+       "n": 8,
+       "leaked": 0
+      },
+      "ip": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "date_of_birth": {
+       "rate": 0.0,
+       "n": 40,
+       "leaked": 0
+      },
+      "address": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "ni_number": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "iban": {
+       "rate": 0.0,
+       "n": 20,
+       "leaked": 0
+      },
+      "uuid": {
+       "rate": 0.0,
+       "n": 12,
+       "leaked": 0
+      },
+      "card": {
+       "rate": 0.0,
+       "n": 7,
+       "leaked": 0
+      },
+      "nhs_number": {
+       "rate": 0.0,
+       "n": 10,
+       "leaked": 0
+      }
+     },
+     "per_tag": {
+      "email_tag": {
+       "rate": 0.0,
+       "n": 50,
+       "leaked": 0
+      },
+      "name_variants": {
+       "rate": 0.002150537634408602,
+       "n": 465,
+       "leaked": 1
+      },
+      "quasi": {
+       "rate": 0.002150537634408602,
+       "n": 465,
+       "leaked": 1
+      },
+      "url_secret": {
+       "rate": 0.0,
+       "n": 94,
+       "leaked": 0
+      }
+     }
+    },
+    "spans_overlap": {
+     "ALL": {
+      "precision": 0.8678899082568807,
+      "recall": 0.8623853211009175,
+      "f1": 0.8651288587078132,
+      "n_pred": 545,
+      "n_gold": 545
+     },
+     "person": {
+      "precision": 0.8333333333333334,
+      "recall": 0.8125,
+      "f1": 0.8227848101265822,
+      "n_pred": 156,
+      "n_gold": 160
+     },
+     "organisation": {
+      "precision": 0.4473684210526316,
+      "recall": 0.425,
+      "f1": 0.4358974358974359,
+      "n_pred": 38,
+      "n_gold": 40
+     },
+     "email": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 60,
+      "n_gold": 60
+     },
+     "phone": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 40,
+      "n_gold": 40
+     },
+     "quasi_identifier": {
+      "precision": 0.7735849056603774,
+      "recall": 0.95,
+      "f1": 0.8527640941434045,
+      "n_pred": 53,
+      "n_gold": 40
+     },
+     "username": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 8,
+      "n_gold": 8
+     },
+     "secret": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 8,
+      "n_gold": 8
+     },
+     "ip": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 13,
+      "n_gold": 20
+     },
+     "ANY": {
+      "precision": 0.9871559633027523,
+      "recall": 0.9467889908256881,
+      "f1": 0.9665511898751806,
+      "n_pred": 545,
+      "n_gold": 545
+     },
+     "date_of_birth": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 40,
+      "n_gold": 40
+     },
+     "address": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "ni_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "iban": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "date": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "uuid": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 12,
+      "n_gold": 12
+     },
+     "card": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 7,
+      "n_gold": 7
+     },
+     "nhs_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 10,
+      "n_gold": 10
+     }
+    },
+    "spans_exact": {
+     "ALL": {
+      "precision": 0.7926605504587156,
+      "recall": 0.7926605504587156,
+      "f1": 0.7926605504587156,
+      "n_pred": 545,
+      "n_gold": 545
+     },
+     "person": {
+      "precision": 0.6474358974358975,
+      "recall": 0.63125,
+      "f1": 0.639240506329114,
+      "n_pred": 156,
+      "n_gold": 160
+     },
+     "organisation": {
+      "precision": 0.4473684210526316,
+      "recall": 0.425,
+      "f1": 0.4358974358974359,
+      "n_pred": 38,
+      "n_gold": 40
+     },
+     "email": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 60,
+      "n_gold": 60
+     },
+     "phone": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 40,
+      "n_gold": 40
+     },
+     "quasi_identifier": {
+      "precision": 0.5471698113207547,
+      "recall": 0.725,
+      "f1": 0.6236559139784946,
+      "n_pred": 53,
+      "n_gold": 40
+     },
+     "username": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 8,
+      "n_gold": 8
+     },
+     "secret": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 8,
+      "n_gold": 8
+     },
+     "ip": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "location": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_pred": 13,
+      "n_gold": 20
+     },
+     "ANY": {
+      "precision": 0.8165137614678899,
+      "recall": 0.8165137614678899,
+      "f1": 0.81651376146789,
+      "n_pred": 545,
+      "n_gold": 545
+     },
+     "date_of_birth": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 40,
+      "n_gold": 40
+     },
+     "address": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "ni_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "iban": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "date": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 20,
+      "n_gold": 20
+     },
+     "uuid": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 12,
+      "n_gold": 12
+     },
+     "card": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 7,
+      "n_gold": 7
+     },
+     "nhs_number": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 10,
+      "n_gold": 10
+     }
+    },
+    "latency_ms_per_1k": 47924.44498601668,
+    "echo_rehydration": 1.0,
+    "echo_n": 299,
+    "utility": null,
+    "utility_n": 0,
+    "rehydration_acc": null,
+    "rehydration_n": 0
+   }
+  }
+ }
+]
