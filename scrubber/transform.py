@@ -6,7 +6,7 @@ import re
 from collections import Counter
 
 from . import surrogates as S
-from .detect.merge import name_tokens
+from .detect.merge import TITLES, name_tokens
 from .models import Action, Span
 from .policy import REMOVED_PLACEHOLDER, Policy
 from .vault import Session
@@ -70,6 +70,31 @@ def _pattern(value: str, type_: str) -> re.Pattern[str]:
     return re.compile(lead + "(?:" + "|".join(parts) + ")" + trail, flags)
 
 
+_CAP_LEFT = re.compile(r"([A-Z][a-z]+(?:['\-][A-Z]?[a-z]+)*) $")
+_CAP_RIGHT = re.compile(r" ([A-Z][a-z]+(?:['\-][A-Z]?[a-z]+)*)(?![\w'])")
+_NOT_NAMES = {"called", "dear", "hi", "hello", "thanks", "spoke", "contact", "customer", "regards", "from", "to",
+              "with", "and", "summary", "note", "notes", "please", "ask", "tell", "email", "phone", "user", "client"}
+
+
+def _extend_name(scrubbed: str, s: int, e: int, roles: set[str], rep: str, vault, text: str) -> tuple[int, int, str]:
+    """If a known surname is preceded by another capitalised word (or a known first name is
+    followed by one), the mention is a different full name ("Georgina Preston" when we know
+    "Joshua Preston"): pseudonymise the whole name as its own person instead."""
+    ns, ne = s, e
+    if "last" in roles:
+        m = _CAP_LEFT.search(scrubbed, max(0, s - 40), s)
+        if m and m.group(1).lower() not in TITLES | _NOT_NAMES | _NAME_STOPWORDS:
+            ns = m.start(1)
+    if "first" in roles and ns == s:
+        m = _CAP_RIGHT.match(scrubbed, e)
+        if m and m.group(1).lower() not in _NOT_NAMES | _NAME_STOPWORDS:
+            ne = m.end(1)
+    if (ns, ne) == (s, e):
+        return s, e, rep
+    full = scrubbed[ns:ne]
+    return ns, ne, vault.pseudonymise("person", full, text)
+
+
 def apply_spans(
     text: str,
     spans: list[Span],
@@ -125,12 +150,16 @@ def apply_spans(
         candidates.setdefault(value, (sur, type_))
     # Entity linking in the leak check: a lone first name or surname of a known person
     # ("Called John", "Ms Doe") gets that person's surrogate.
+    roles: dict[str, set[str]] = {}  # name token -> {"first", "last"}
     for value, (type_, sur) in list(vault.seen.items()):
         if type_ != "person":
             continue
-        for tok in re.findall(r"[^\W\d_]+(?:['\-][^\W\d_]+)*", value):
+        toks = re.findall(r"[^\W\d_]+(?:['\-][^\W\d_]+)*", value)
+        for i, tok in enumerate(toks):
             if len(tok) >= 3 and tok[0].isupper() and tok.lower() not in _NAME_STOPWORDS:
                 candidates.setdefault(tok, (sur, "person"))
+                if len(toks) > 1:
+                    roles.setdefault(tok, set()).add("first" if i == 0 else "last" if i == len(toks) - 1 else "mid")
     for value, rep in removed_values:
         candidates[value] = (rep, "removed")
     for value, rep, type_ in generalised_values:
@@ -147,11 +176,14 @@ def apply_spans(
             rep, type_ = candidates[value]
             for m in _pattern(value, type_).finditer(scrubbed):
                 s, e = m.span()
+                hit_rep = rep
+                if value in roles:  # a lone name token: is it part of a *different* full name?
+                    s, e, hit_rep = _extend_name(scrubbed, s, e, roles[value], rep, vault, text)
                 if any(s < re_ and rs < e for rs, re_ in regions):
                     continue
                 if any(s < he and hs < e for hs, he, _, _ in hits):
                     continue
-                hits.append((s, e, rep, type_))
+                hits.append((s, e, hit_rep, type_))
         if not hits:
             break
         for s, e, rep, type_ in hits:

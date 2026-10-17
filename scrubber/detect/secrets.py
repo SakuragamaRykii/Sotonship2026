@@ -91,7 +91,8 @@ class SecretsDetector:
             add(m.start("v"), m.end("v"), "Bearer token")
         for m in _URL_CREDS.finditer(text):
             add(m.start("pw"), m.end("pw"), "password in URL / connection string")
-            if m.group("user").lower() not in _SERVICE_ACCOUNTS:
+            user = m.group("user").lower()
+            if user not in _SERVICE_ACCOUNTS and not user.startswith(("svc", "service", "sys_", "app_", "bot")):
                 add(m.start("user"), m.end("user"), "username in URL / connection string", 0.7, "username")
         for m in _PROSE_PASSWORD.finditer(text):
             add(m.start("v"), m.end("v"), "value stated as a password", 0.9)

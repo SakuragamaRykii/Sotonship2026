@@ -143,3 +143,18 @@ def test_report_shape(scrub_regex):
     assert r.report["counts_by_type"] == {"email": 1}
     assert r.actions[0]["action"] == "PSEUDONYMISE" and r.actions[0]["replacement"] == "user_1@example.com"
     assert r.spans[0].reason
+
+
+def test_shared_surname_is_a_different_person(scrub_regex):
+    s = Session()
+    text = '{"name": "Joshua Preston", "note": "Georgina Preston and Ms Preston met. Called Joshua; Joshua Smith too."}'
+    r = scrub_regex(text, s)
+    for name in ("Joshua", "Preston", "Georgina", "Smith"):
+        assert name not in r.scrubbed_text
+    back, _ = rehydrate(r.scrubbed_text, s)
+    assert "Georgina Preston" in back and "Joshua Smith" in back and "Ms Joshua Preston" in back
+
+
+def test_phone_09_numbers(scrub_regex):
+    r = scrub_regex("call (0909) 879 0940 or +44(0)9098790519", Session())
+    assert "879" not in r.scrubbed_text and "9098790519" not in r.scrubbed_text

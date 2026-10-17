@@ -13,7 +13,7 @@ from .base import make_span
 
 EMAIL = re.compile(r"(?<![A-Za-z0-9._%+\-])[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}\b")
 UK_PHONE = re.compile(r"(?<![\w+])(?:\+44\s?\(0\)\s?|\+44\s?|0044\s?|\(?0)(?:\d\)?[\s\-]?){8,10}\d(?![\d])")
-POSTCODE = re.compile(r"\b(?:[A-PR-UWYZ][A-HK-Y]?\d[A-HJKPSTUW\d]?|GIR)\s?\d[ABD-HJLNP-UW-Z]{2}\b")
+POSTCODE = re.compile(r"\b(?:[A-PR-UWYZ][A-HK-Y]?\d[A-Z\d]?|GIR)\s?\d[ABD-HJLNP-UW-Z]{2}\b")
 NHS = re.compile(r"(?<![\d\-])\d{3}[ \-]?\d{3}[ \-]?\d{4}(?![\d\-])")
 NI = re.compile(
     r"\b(?!BG|GB|NK|KN|TN|NT|ZZ)[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]\s?\d{2}\s?\d{2}\s?\d{2}\s?[A-D]\b"
@@ -74,7 +74,7 @@ def uk_phone_ok(raw: str) -> bool:
         if digits.startswith("0"):  # +44 (0)7…
             digits = digits[1:]
         digits = "0" + digits
-    return digits.startswith("0") and len(digits) in (10, 11) and digits[1] in "123578"
+    return digits.startswith("0") and len(digits) in (10, 11) and digits[1] in "1235789"
 
 
 # key names that make a URL query value personal: name → type
