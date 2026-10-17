@@ -46,7 +46,7 @@ class NerConfig(BaseModel):
 
 
 class LlmDetectorConfig(BaseModel):
-    model: str = "llama3.1:8b"
+    model: str = "qwen3:8b"
     host: str = "http://localhost:11434"
     timeout_s: float = 60
 

@@ -104,5 +104,17 @@ def eval_(
     main(argv)
 
 
+@app.command()
+def audit(
+    purpose: str | None = typer.Option(None, help="leakage | utility | app"),
+    system: str | None = typer.Option(None, help="e.g. full, presidio"),
+) -> None:
+    """Re-scan every logged payload (logs/payloads) for secrets and checksum-valid identifiers."""
+    from eval.audit_payloads import main
+
+    argv = (["--purpose", purpose] if purpose else []) + (["--system", system] if system else [])
+    main(argv)
+
+
 if __name__ == "__main__":
     app()

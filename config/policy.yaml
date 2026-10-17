@@ -155,6 +155,6 @@ ner:
 
 # L5 quasi-identifiers via a local Ollama model. Off unless enabled above or with --layers.
 llm_detector:
-  model: llama3.1:8b
+  model: qwen3:8b             # any local Ollama model; `ollama pull qwen3:8b`
   host: http://localhost:11434
   timeout_s: 60

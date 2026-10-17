@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from urllib.parse import urlsplit
 
 import httpx
@@ -54,11 +55,12 @@ class LlmQuasiDetector:
             r = httpx.post(
                 f"{self.host}/api/generate",
                 json={"model": self.model, "prompt": PROMPT.format(text=text), "format": "json", "stream": False,
-                      "options": {"temperature": 0}},
+                      "think": False, "options": {"temperature": 0}},
                 timeout=self.timeout,
             )
             r.raise_for_status()
-            data = json.loads(r.json().get("response", "{}"))
+            raw = re.sub(r"<think>.*?</think>", "", r.json().get("response", "{}"), flags=re.DOTALL)
+            data = json.loads(raw)
         except (httpx.HTTPError, json.JSONDecodeError, ValueError) as exc:
             self.warnings.append(f"L5 skipped: local LLM unavailable ({type(exc).__name__})")
             return []

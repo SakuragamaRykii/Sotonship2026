@@ -37,6 +37,8 @@ _URL_CREDS = re.compile(r"(?i)\b[a-z][a-z0-9+.\-]*://(?P<user>[^\s:/@?#]+):(?P<p
 _PROSE_PASSWORD = re.compile(r"(?i)\b(?:password|passcode|passwd|pin)\s+(?:is|was|=|:)\s+[\"']?(?P<v>[^\s\"',;]{4,})")
 _TOKEN_CANDIDATE = re.compile(r"(?<![A-Za-z0-9+/=_\-])[A-Za-z0-9+/_\-]{20,}={0,2}(?![A-Za-z0-9+/=_\-])")
 _UUID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+# Already-redacted values ([SECRET_REMOVED], <PERSON>, ***): never a secret themselves.
+_REDACTION = re.compile(r"^(?:\[[A-Z0-9_ \-]+\]|<[A-Z_]+>|\*+)$")
 _PLACEHOLDER_VALUES = {"", "null", "none", "nil", "true", "false", "redacted", "<redacted>", "[redacted]", "***", "****",
                        "xxx", "xxxx", "changeme", "example", "bearer", "basic", "n/a", "undefined"}
 _SERVICE_ACCOUNTS = {"admin", "root", "postgres", "user", "app", "service", "test", "guest", "sa", "ubuntu",
@@ -78,7 +80,7 @@ class SecretsDetector:
         spans: list[Span] = []
 
         def add(s: int, e: int, reason: str, conf: float = 0.99, type_: str = "secret") -> None:
-            if e > s:
+            if e > s and not _REDACTION.match(text[s:e]):
                 spans.append(make_span(text, s, e, type_, self.layer, conf, reason))
 
         for reason, rx in _KNOWN_KEYS:

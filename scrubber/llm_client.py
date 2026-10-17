@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,7 +24,12 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent.parent
 PAYLOAD_DIR = ROOT / "logs" / "payloads"
 _FALLBACK_MODELS = {"claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"}
-DEFAULT_MODELS = {"anthropic": "claude-opus-5-5", "openai": "gpt-4o-mini", "ollama": "llama3.1:8b", "dryrun": "none"}
+DEFAULT_MODELS = {"anthropic": "claude-opus-5-5", "openai": "gpt-4o-mini", "ollama": "qwen3:8b", "dryrun": "none"}
+
+
+def strip_think(text: str) -> str:
+    """Drop <think>…</think> blocks some local reasoning models emit."""
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
 class LLMClient:
@@ -99,10 +105,12 @@ class LLMClient:
         import httpx
 
         host = os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
-        r = httpx.post(f"{host}/api/generate", json={"model": self.model, "prompt": prompt, "stream": False},
+        r = httpx.post(f"{host}/api/generate",
+                       json={"model": self.model, "prompt": prompt, "stream": False, "think": False,
+                             "options": {"temperature": 0}},
                        timeout=300)
         r.raise_for_status()
-        return r.json().get("response", "")
+        return strip_think(r.json().get("response", ""))
 
     def send_with_retry(self, prompt: str, meta: dict | None = None, attempts: int = 3) -> str:
         for i in range(attempts):
