@@ -52,7 +52,7 @@ COLOURS = {
 TYPES = sorted(set(COLOURS) | set(default_policy().modes["balanced"]))
 BASE_LAYERS = ("L1", "L2", "L3", "L4")
 ADVANCED_LAYER = "L5"  # local LLM, switched on by the "use advanced local LLM" tick box
-MODE = "balanced"
+MODE = "strict"
 WARMUP_TEXT = "Hi, I'm Jane Doe from Southampton. Email jane.doe@example.com or call 07911 123456."
 SURROGATE_SHAPES = [r"\[[A-Z_]+(?:_\d+)?(?:_REMOVED)?\]", r"\[AGE \d+-\d+\]"]
 PAGE_SCRUB, PAGE_CHAT = 0, 1
@@ -552,7 +552,7 @@ class MainWindow(QMainWindow):
         self.copy_btn.setIconSize(QSize(22, 22))
         self.copy_btn.setToolTip("Copy the scrubbed text")
         self.copy_btn.clicked.connect(self._copy)
-        self.advanced = QCheckBox("use advanced local LLM")
+        self.advanced = QCheckBox("Use advanced local LLM")
         self.advanced.setToolTip("Slower, but can spot more subtle details. Runs entirely on this computer.")
         bar.addWidget(self.update_btn)
         bar.addWidget(self.copy_btn)
@@ -1131,4 +1131,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-    
