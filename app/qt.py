@@ -21,7 +21,7 @@ import re
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFontDatabase, QKeySequence, QShortcut, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMainWindow,
@@ -51,6 +51,7 @@ EXAMPLE = """Hi team, I'm Jane Doe (jane.doe+shop@gmail.com, 07911 123456). Ms D
 2024-05-01T10:00:00Z WARN auth failed user=jdoe92 src=10.0.0.12 token=sk-proj-Q1w2E3r4T5y6U7i8O9p0AsDfGhJk
 {"customer": "Jane Doe", "dob": "03/05/1988", "address": "12 High Street, Southampton SO17 1BJ", "note": "Jane asked about her refund"}"""
 
+WARMUP_TEXT = "Hi, I'm Jane Doe from Southampton. Email jane.doe@example.com or call 07911 123456."
 T_INPUT, T_REVIEW, T_RESPONSE = range(3)
 SURROGATE_SHAPES = [r"\[[A-Z_]+(?:_\d+)?(?:_REMOVED)?\]", r"\[AGE \d+-\d+\]"]
 
@@ -193,6 +194,25 @@ class DetectWorker(QThread):
             self.failed.emit(f"{type(exc).__name__}: {exc}")
 
 
+class LoadWorker(QThread):
+    """Builds the default pipeline at launch so the first Detect is instant."""
+
+    done = Signal(object, object)  # layers, scrubber
+    failed = Signal(str)
+
+    def __init__(self, layers: tuple[str, ...]) -> None:
+        super().__init__()
+        self.layers = layers
+
+    def run(self) -> None:
+        try:
+            scrubber = Scrubber(list(self.layers))
+            scrubber.detect(WARMUP_TEXT)  # forces any lazily-loaded model to load now, not on first Detect
+            self.done.emit(self.layers, scrubber)
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(f"{type(exc).__name__}: {exc}")
+
+
 class SendWorker(QThread):
     done = Signal(str)
     failed = Signal(str)
@@ -255,7 +275,16 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self._build_response_tab(), "3 · Response")
         self._set_review_enabled(False)
         main.addWidget(self.tabs, 1)
-        self.statusBar().showMessage("Paste text and press Detect.")
+        # Load the detection model in the background so the user can start typing right away.
+        self.model_status = QLabel("⏳ Loading detection model…")
+        self.model_status.setStyleSheet(WARN_STYLE)
+        self.statusBar().addPermanentWidget(self.model_status)  # bottom-right corner
+        self.detect_btn.setEnabled(False)
+        self.detect_btn.setToolTip("Available once the detection model has finished loading")
+        self.loader = LoadWorker(tuple(sorted(BASE_LAYERS)))
+        self.loader.done.connect(self._preloaded)
+        self.loader.failed.connect(self._preload_failed)
+        self.loader.start()
 
     # ---- UI construction -------------------------------------------------------------------------
     def _build_input_tab(self) -> QWidget:
@@ -411,8 +440,24 @@ class MainWindow(QMainWindow):
         stale = self.text is not None and self.input.toPlainText() != self.text
         self.input_note.setText("The text has changed since the last detection. Press Detect to refresh." if stale else "")
 
+    def _preloaded(self, layers: tuple[str, ...], scrubber: Scrubber) -> None:
+        self.scrubbers[layers] = scrubber
+        self.detect_btn.setToolTip("")
+        self.detect_btn.setEnabled(True)
+        self.model_status.setStyleSheet(OK_STYLE)
+        self.model_status.setText("✓ Model ready")
+        QTimer.singleShot(4000, self.model_status.clear)
+
+    def _preload_failed(self, msg: str) -> None:
+        # Not fatal: Detect falls back to loading the model on first use.
+        self.detect_btn.setToolTip("")
+        self.detect_btn.setEnabled(True)
+        self.model_status.setText("⚠ Model will load on first Detect")
+        self.statusBar().showMessage("The model couldn't be preloaded; it will load when you press Detect.", 8000)
+        self.detect_warnings.setText(f"⚠ Preload failed: {msg}")
+
     def _detect(self) -> None:
-        if self.worker is not None and self.worker.isRunning():
+        if self.loader.isRunning() or (self.worker is not None and self.worker.isRunning()):
             return
         text = self.input.toPlainText()
         if not text.strip():
@@ -595,8 +640,9 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("New session started. Earlier replacements have been forgotten.", 4000)
 
     def closeEvent(self, event) -> None:  # noqa: N802
-        if self.worker is not None and self.worker.isRunning():
-            self.worker.wait(3000)
+        for t in (self.loader, self.worker):
+            if t is not None and t.isRunning():
+                t.wait(3000)
         super().closeEvent(event)
 
 
