@@ -115,6 +115,13 @@ never write the vault to disk.
 
 ### Streamlit app
 
+**STREAMLIT VERSION IS OUTDATED PLEASE RUN:**
+```bash
+python app/qt.py
+```
+
+**INSTEAD OF**
+
 ```bash
 streamlit run app/streamlit_app.py
 ```
