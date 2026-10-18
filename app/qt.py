@@ -3,11 +3,13 @@
     pip install PySide6
     python app/qt_app.py
 
-Same flow as the Streamlit version: paste text -> review detected spans (accept / reject / add)
--> see exactly what the model will receive -> copy it or send it -> paste the response ->
-re-hydrated answer with warnings. Everything runs locally; only the scrubbed prompt is ever
-sent, and only when you press Send.
+Three steps:
+  1. Input    - paste text and press Detect.
+  2. Review   - original and scrubbed text side by side, with the table of hidden items below.
+                Untick a row to leave that text as it is; copy the scrubbed text or send it.
+  3. Response - paste the AI's answer to get the real names and details put back.
 
+Everything runs locally; only the scrubbed prompt is ever sent, and only when you press Send.
 Detection and sending run in worker threads so the window never freezes (the first detection
 loads the local NER model, which takes a few seconds).
 """
@@ -22,9 +24,9 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QColor, QFontDatabase, QKeySequence, QShortcut, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
-    QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSplitter,
-    QTableWidget, QTableWidgetItem, QTabWidget, QTextEdit, QToolTip, QVBoxLayout, QWidget,
+    QApplication, QCheckBox, QComboBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMainWindow,
+    QMessageBox, QPlainTextEdit, QPushButton, QSplitter, QTableWidget, QTableWidgetItem, QTabWidget,
+    QTextEdit, QToolTip, QVBoxLayout, QWidget,
 )
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -42,26 +44,20 @@ COLOURS = {
     "date": "#ffe8cc", "organisation": "#99e9f2", "location": "#c5f6fa", "quasi_identifier": "#f783ac",
 }
 TYPES = sorted(set(COLOURS) | set(default_policy().modes["balanced"]))
-LAYER_NAMES = ["L1", "L2", "L3", "L4", "L5"]
-LAYER_HELP = "L1 secrets · L2 structured · L3 key-aware · L4 local NER (GLiNER) · L5 local LLM (Ollama)"
-KNOWN_LIMITS = """\
-- English text and UK identifier formats only.
-- Quasi-identifiers in free text ("the only female professor in…") are only partially covered (L5, optional).
-- Unknown custom ID formats (e.g. `CUST-88231`) are missed unless the key name matches or a custom pattern is added in `config/policy.yaml`.
-- **Pseudonymised data is still personal data.** This tool reduces risk; it does not make data anonymous or compliant.
-"""
+BASE_LAYERS = ("L1", "L2", "L3", "L4")
+ADVANCED_LAYER = "L5"  # local LLM, switched on by the "use advanced local LLM" tick box
+MODE = "balanced"
 EXAMPLE = """Hi team, I'm Jane Doe (jane.doe+shop@gmail.com, 07911 123456). Ms Doe's NHS number is 943 476 5919.
 2024-05-01T10:00:00Z WARN auth failed user=jdoe92 src=10.0.0.12 token=sk-proj-Q1w2E3r4T5y6U7i8O9p0AsDfGhJk
 {"customer": "Jane Doe", "dob": "03/05/1988", "address": "12 High Street, Southampton SO17 1BJ", "note": "Jane asked about her refund"}"""
 
-T_INPUT, T_REVIEW, T_PREVIEW, T_RESPONSE = range(4)
+T_INPUT, T_REVIEW, T_RESPONSE = range(3)
 SURROGATE_SHAPES = [r"\[[A-Z_]+(?:_\d+)?(?:_REMOVED)?\]", r"\[AGE \d+-\d+\]"]
 
 STYLE = """
 QWidget { background:#1e1f22; color:#dfe1e5; font-size:13px; }
 QPlainTextEdit, QTextEdit, QTableWidget, QLineEdit, QComboBox {
     background:#2b2d30; border:1px solid #3c3f41; border-radius:6px; padding:3px; }
-QScrollArea { border:none; }
 QPushButton { background:#3574f0; color:white; border:none; border-radius:6px; padding:7px 16px; }
 QPushButton:hover { background:#4a85f5; }
 QPushButton:disabled { background:#3c3f41; color:#7a7e85; }
@@ -73,8 +69,6 @@ QTabBar::tab:selected { background:#3574f0; color:white; }
 QTabBar::tab:disabled { color:#6b6f76; }
 QHeaderView::section { background:#2b2d30; border:none; border-bottom:1px solid #3c3f41; padding:5px; }
 QTableWidget { gridline-color:#33363a; }
-QGroupBox { border:1px solid #3c3f41; border-radius:6px; margin-top:10px; padding-top:8px; }
-QGroupBox::title { subcontrol-origin:margin; left:10px; padding:0 4px; }
 QToolTip { background:#2b2d30; color:#dfe1e5; border:1px solid #555; }
 QSplitter::handle { background:#2b2d30; }
 """
@@ -119,6 +113,7 @@ class HighlightView(QPlainTextEdit):
 
     def set_content(self, text: str, highlights: list[tuple[int, int, str, str]]) -> None:
         """highlights: (start, end, colour, tooltip) in code-point offsets into `text`."""
+        scroll = self.verticalScrollBar().value()  # keep the reader's place when the view refreshes
         self.setPlainText(text)
         self._map = _Offsets(text)
         self._hl = sorted(_non_overlapping(highlights), key=lambda h: h[0])
@@ -135,6 +130,7 @@ class HighlightView(QPlainTextEdit):
             sel.cursor, sel.format = cur, fmt
             selections.append(sel)
         self.setExtraSelections(selections)
+        self.verticalScrollBar().setValue(scroll)
 
     def reveal(self, start: int) -> None:
         cur = QTextCursor(self.document())
@@ -172,7 +168,7 @@ def output_highlights(text: str, session: Session) -> list[tuple[int, int, str, 
     rx = re.compile("|".join([re.escape(k) for k in keys] + SURROGATE_SHAPES))
     out = []
     for m in rx.finditer(text):
-        tip = "surrogate (restored locally)" if m.group() in session.vault.reverse else "removed / generalised value"
+        tip = "stand-in (the real value is restored locally)" if m.group() in session.vault.reverse else "removed or generalised"
         out.append((m.start(), m.end(), "#a5d8ff", tip))
     return out
 
@@ -219,7 +215,6 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Local PII scrubber")
-        self.policy = default_policy()
         self.session = Session()
         self.scrubbers: dict[tuple[str, ...], Scrubber] = {}
         self.spans: list[dict] = []  # span fields + "keep"
@@ -236,112 +231,56 @@ class MainWindow(QMainWindow):
 
         root = QWidget()
         self.setCentralWidget(root)
-        lay = QHBoxLayout(root)
-        lay.addWidget(self._build_sidebar())
-        main = QVBoxLayout()
+        main = QVBoxLayout(root)
+
+        header = QHBoxLayout()
+        titles = QVBoxLayout()
         title = QLabel("🛡️  Local PII scrubber")
         title.setStyleSheet("font-size:20px;font-weight:600;")
         sub = QLabel("Detection runs on this machine. Only the scrubbed text is ever sent to a model.")
         sub.setStyleSheet(MUTED_STYLE)
-        main.addWidget(title)
-        main.addWidget(sub)
+        titles.addWidget(title)
+        titles.addWidget(sub)
+        header.addLayout(titles, 1)
+        new = QPushButton("New session")
+        new.setObjectName("secondary")
+        new.setToolTip("Forget every replacement made so far and start fresh")
+        new.clicked.connect(self._new_session)
+        header.addWidget(new, 0, Qt.AlignmentFlag.AlignTop)
+        main.addLayout(header)
+
         self.tabs = QTabWidget()
         self.tabs.addTab(self._build_input_tab(), "1 · Input")
         self.tabs.addTab(self._build_review_tab(), "2 · Review")
-        self.tabs.addTab(self._build_preview_tab(), "3 · Preview & send")
-        self.tabs.addTab(self._build_response_tab(), "4 · Response")
+        self.tabs.addTab(self._build_response_tab(), "3 · Response")
         self._set_review_enabled(False)
-        self.tabs.currentChanged.connect(self._tab_changed)
         main.addWidget(self.tabs, 1)
-        lay.addLayout(main, 1)
-        self._refresh_session_label()
         self.statusBar().showMessage("Paste text and press Detect.")
 
     # ---- UI construction -------------------------------------------------------------------------
-    def _build_sidebar(self) -> QWidget:
-        inner = QWidget()
-        v = QVBoxLayout(inner)
-        h = QLabel("Settings")
-        h.setStyleSheet("font-size:16px;font-weight:600;")
-        v.addWidget(h)
-
-        v.addWidget(QLabel("Mode"))
-        self.mode = QComboBox()
-        self.mode.addItems(["balanced", "strict"])
-        self.mode.setToolTip("strict generalises more (shifted dates, IPs removed, …)")
-        self.mode.currentTextChanged.connect(self._mode_changed)
-        v.addWidget(self.mode)
-
-        box = QGroupBox("Detector layers")
-        box.setToolTip(LAYER_HELP)
-        bl = QVBoxLayout(box)
-        self.layer_boxes: dict[str, QCheckBox] = {}
-        for name in LAYER_NAMES:
-            cb = QCheckBox(name)
-            cb.setChecked(name in self.policy.enabled_layers)
-            self.layer_boxes[name] = cb
-            bl.addWidget(cb)
-        note = QLabel(LAYER_HELP)
-        note.setWordWrap(True)
-        note.setStyleSheet(MUTED_STYLE + "font-size:11px;")
-        bl.addWidget(note)
-        v.addWidget(box)
-
-        self.session_label = QLabel()
-        self.session_label.setStyleSheet(MUTED_STYLE)
-        self.session_label.setWordWrap(True)
-        v.addWidget(self.session_label)
-        new = QPushButton("New session (forget mappings)")
-        new.setObjectName("secondary")
-        new.clicked.connect(self._new_session)
-        v.addWidget(new)
-
-        limits = QGroupBox("Known limits")
-        limits.setCheckable(True)
-        limits.setChecked(False)
-        ll = QVBoxLayout(limits)
-        lab = QLabel(KNOWN_LIMITS)
-        lab.setTextFormat(Qt.TextFormat.MarkdownText)
-        lab.setWordWrap(True)
-        lab.setVisible(False)
-        ll.addWidget(lab)
-        limits.toggled.connect(lab.setVisible)
-        v.addWidget(limits)
-
-        legend = QGroupBox("Legend")
-        grid = QGridLayout(legend)
-        for i, (t, c) in enumerate(COLOURS.items()):
-            sw = QLabel(t)
-            sw.setStyleSheet(f"background:{c};color:#111;border-radius:3px;padding:1px 6px;font-size:11px;")
-            grid.addWidget(sw, i // 2, i % 2)
-        v.addWidget(legend)
-        v.addStretch(1)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(inner)
-        scroll.setFixedWidth(290)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        return scroll
-
     def _build_input_tab(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
-        v.addWidget(QLabel("Paste text (prose, logs, JSON, key=value…)"))
+        v.addWidget(QLabel("Paste your text here (messages, logs, JSON, anything)"))
         self.input = QPlainTextEdit()
         self.input.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
         self.input.setPlainText(EXAMPLE)
         self.input.textChanged.connect(self._input_changed)
         v.addWidget(self.input, 1)
+
         row = QHBoxLayout()
         self.detect_btn = QPushButton("Detect")
         self.detect_btn.clicked.connect(self._detect)
         QShortcut(QKeySequence("Ctrl+Return"), self, activated=self._detect)
         row.addWidget(self.detect_btn)
+        self.advanced = QCheckBox("use advanced local LLM")
+        self.advanced.setToolTip("Slower, but can spot more subtle details. Runs entirely on this computer.")
+        row.addWidget(self.advanced)
         self.input_note = QLabel()
         self.input_note.setStyleSheet(WARN_STYLE)
         row.addWidget(self.input_note, 1)
         v.addLayout(row)
+
         self.detect_warnings = QLabel()
         self.detect_warnings.setStyleSheet(WARN_STYLE)
         self.detect_warnings.setWordWrap(True)
@@ -351,11 +290,30 @@ class MainWindow(QMainWindow):
     def _build_review_tab(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
-        v.addWidget(QLabel("Detected spans — hover a highlight for the type, detector layer and reason."))
-        split = QSplitter(Qt.Orientation.Vertical)
-        self.review_view = HighlightView()
-        split.addWidget(self.review_view)
+        hint = QLabel("Check what will be hidden before anything is sent. Untick a row to leave that text as it is. "
+                      "Hover a highlight to see why it was flagged.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet(MUTED_STYLE)
+        v.addWidget(hint)
 
+        split = QSplitter(Qt.Orientation.Vertical)
+
+        # top: original | scrubbed, side by side
+        top = QSplitter(Qt.Orientation.Horizontal)
+        for attr, title in (("orig_view", "Original (stays here)"), ("out_view", "Scrubbed text (what gets sent)")):
+            box = QWidget()
+            bv = QVBoxLayout(box)
+            bv.setContentsMargins(0, 0, 0, 0)
+            lab = QLabel(title)
+            lab.setStyleSheet("font-weight:600;")
+            view = HighlightView()
+            setattr(self, attr, view)
+            bv.addWidget(lab)
+            bv.addWidget(view, 1)
+            top.addWidget(box)
+        split.addWidget(top)
+
+        # bottom: the table of scrubbed material, then the manual-add row
         lower = QWidget()
         lv = QVBoxLayout(lower)
         lv.setContentsMargins(0, 0, 0, 0)
@@ -374,7 +332,7 @@ class MainWindow(QMainWindow):
 
         add = QHBoxLayout()
         self.manual_text = QLineEdit()
-        self.manual_text.setPlaceholderText("Add a span manually: exact text (every occurrence is added)")
+        self.manual_text.setPlaceholderText("Missed something? Type the exact text here (every occurrence is added)")
         self.manual_text.returnPressed.connect(self._add_manual)
         self.manual_type = QComboBox()
         self.manual_type.addItems(TYPES)
@@ -386,34 +344,11 @@ class MainWindow(QMainWindow):
         add.addWidget(btn)
         lv.addLayout(add)
         split.addWidget(lower)
-        split.setSizes([220, 380])
-        v.addWidget(split, 1)
-
-        nxt = QPushButton("Next: preview what the model will see →")
-        nxt.clicked.connect(lambda: self.tabs.setCurrentIndex(T_PREVIEW))
-        v.addWidget(nxt, 0, Qt.AlignmentFlag.AlignRight)
-        return w
-
-    def _build_preview_tab(self) -> QWidget:
-        w = QWidget()
-        v = QVBoxLayout(w)
-        split = QSplitter(Qt.Orientation.Horizontal)
-        for attr, title in (("orig_view", "Original (stays here)"), ("out_view", "Scrubbed prompt (sent)")):
-            box = QWidget()
-            bv = QVBoxLayout(box)
-            bv.setContentsMargins(0, 0, 0, 0)
-            lab = QLabel(title)
-            lab.setStyleSheet("font-weight:600;")
-            view = HighlightView()
-            setattr(self, attr, view)
-            bv.addWidget(lab)
-            bv.addWidget(view, 1)
-            split.addWidget(box)
+        split.setSizes([300, 280])
         v.addWidget(split, 1)
 
         self.report_label = QLabel()
         self.report_label.setStyleSheet(MUTED_STYLE)
-        self.report_label.setWordWrap(True)
         self.preview_warnings = QLabel()
         self.preview_warnings.setStyleSheet(WARN_STYLE)
         self.preview_warnings.setWordWrap(True)
@@ -421,34 +356,31 @@ class MainWindow(QMainWindow):
         v.addWidget(self.preview_warnings)
 
         self.instruction = QLineEdit()
-        self.instruction.setPlaceholderText("Instruction to prepend (optional)")
+        self.instruction.setPlaceholderText("Instruction to add in front of the text (optional)")
         v.addWidget(self.instruction)
 
         row = QHBoxLayout()
-        copy = QPushButton("Copy scrubbed prompt")
+        copy = QPushButton("Copy scrubbed text")
         copy.setObjectName("secondary")
         copy.clicked.connect(self._copy)
         self.send_btn = QPushButton(f"Send via {self.client.provider}")
         self.send_btn.setEnabled(self.client.provider != "dryrun")
-        self.send_btn.setToolTip("Set LLM_PROVIDER and an API key in .env to enable")
+        self.send_btn.setToolTip("Set LLM_PROVIDER and an API key in .env to enable sending")
         self.send_btn.clicked.connect(self._send)
-        info = QLabel(f"provider `{self.client.provider}` · model `{self.client.model}` · "
-                      f"exact payload logged to `{self.client.log_path.name}`")
-        info.setStyleSheet(MUTED_STYLE)
         row.addWidget(copy)
         row.addWidget(self.send_btn)
-        row.addWidget(info, 1)
+        row.addStretch(1)
         v.addLayout(row)
         return w
 
     def _build_response_tab(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
-        v.addWidget(QLabel("Paste (or receive) the model's response"))
+        v.addWidget(QLabel("Paste (or receive) the AI's response"))
         self.response_box = QPlainTextEdit()
         self.response_box.textChanged.connect(self._rehydrate)
         v.addWidget(self.response_box, 1)
-        lab = QLabel("Re-hydrated (local only)")
+        lab = QLabel("With the real details put back (stays on this computer)")
         lab.setStyleSheet("font-weight:600;")
         v.addWidget(lab)
         self.restored_view = QPlainTextEdit()
@@ -461,14 +393,11 @@ class MainWindow(QMainWindow):
 
     # ---- helpers ---------------------------------------------------------------------------------
     def _set_review_enabled(self, on: bool) -> None:
-        for i in (T_REVIEW, T_PREVIEW, T_RESPONSE):
+        for i in (T_REVIEW, T_RESPONSE):
             self.tabs.setTabEnabled(i, on)
 
-    def _selected_layers(self) -> tuple[str, ...]:
-        return tuple(sorted(n for n, cb in self.layer_boxes.items() if cb.isChecked()))
-
-    def _refresh_session_label(self) -> None:
-        self.session_label.setText(f"Session {self.session.id} · {len(self.session.vault.reverse)} mappings in memory")
+    def _layers(self) -> tuple[str, ...]:
+        return tuple(sorted(BASE_LAYERS + ((ADVANCED_LAYER,) if self.advanced.isChecked() else ())))
 
     def _kept_spans(self) -> list[Span]:
         return [Span(**{k: v for k, v in s.items() if k != "keep"}) for s in self.spans if s["keep"]]
@@ -480,22 +409,19 @@ class MainWindow(QMainWindow):
     # ---- slots: input / detect -------------------------------------------------------------------
     def _input_changed(self) -> None:
         stale = self.text is not None and self.input.toPlainText() != self.text
-        self.input_note.setText("Input edited since the last detection — press Detect to refresh." if stale else "")
+        self.input_note.setText("The text has changed since the last detection. Press Detect to refresh." if stale else "")
 
     def _detect(self) -> None:
         if self.worker is not None and self.worker.isRunning():
             return
         text = self.input.toPlainText()
         if not text.strip():
-            self.statusBar().showMessage("Nothing to detect — paste some text first.", 4000)
+            self.statusBar().showMessage("Nothing to detect. Paste some text first.", 4000)
             return
-        layers = self._selected_layers()
-        if not layers:
-            self.statusBar().showMessage("Select at least one detector layer.", 4000)
-            return
+        layers = self._layers()
         self._pending = (layers, text)
         self.detect_btn.setEnabled(False)
-        self.statusBar().showMessage("Detecting… (the first run loads the local NER model)")
+        self.statusBar().showMessage("Detecting… (the first run loads the local model and can take a moment)")
         self.worker = DetectWorker(layers, self.scrubbers.get(layers), text)
         self.worker.done.connect(self._detected)
         self.worker.failed.connect(self._detect_failed)
@@ -513,8 +439,8 @@ class MainWindow(QMainWindow):
         self._input_changed()
         self._set_review_enabled(True)
         self._fill_table()
-        self._refresh_review_view()
-        self.statusBar().showMessage(f"Found {len(self.spans)} spans.", 5000)
+        self._apply()
+        self.statusBar().showMessage(f"Found {len(self.spans)} item(s) to hide.", 5000)
         self.tabs.setCurrentIndex(T_REVIEW)
 
     def _detect_failed(self, msg: str) -> None:
@@ -523,9 +449,6 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "Detection failed", msg)
 
     # ---- slots: review ---------------------------------------------------------------------------
-    def _refresh_review_view(self) -> None:
-        self.review_view.set_content(self.text or "", span_highlights(self.spans))
-
     def _fill_table(self) -> None:
         self._filling = True
         t = self.table
@@ -554,16 +477,16 @@ class MainWindow(QMainWindow):
         if self._filling or item.column() != 0 or item.row() >= len(self.spans):
             return
         self.spans[item.row()]["keep"] = item.checkState() == Qt.CheckState.Checked
-        self._refresh_review_view()
+        self._apply()
 
     def _type_changed(self, row: int, value: str) -> None:
         if not self._filling and row < len(self.spans):
             self.spans[row]["type"] = value
-            self._refresh_review_view()
+            self._apply()
 
     def _row_selected(self, row: int, *_: int) -> None:
         if 0 <= row < len(self.spans):
-            self.review_view.reveal(self.spans[row]["start"])
+            self.orig_view.reveal(self.spans[row]["start"])
 
     def _add_manual(self) -> None:
         manual = self.manual_text.text()
@@ -575,46 +498,43 @@ class MainWindow(QMainWindow):
                                "source": "manual", "confidence": 1.0, "reason": "added by reviewer", "keep": True})
             found += 1
         if not found:
-            self.statusBar().showMessage("Not found in the text.", 4000)
+            self.statusBar().showMessage("That text wasn't found in the original.", 4000)
             return
         self.spans.sort(key=lambda s: s["start"])
         self.manual_text.clear()
         self._fill_table()
-        self._refresh_review_view()
-        self.statusBar().showMessage(f"Added {found} span(s).", 4000)
-
-    # ---- slots: preview / send -------------------------------------------------------------------
-    def _mode_changed(self, _: str) -> None:
-        if self.text is not None and self.tabs.currentIndex() == T_PREVIEW:
-            self._apply()
-
-    def _tab_changed(self, index: int) -> None:
-        if index == T_PREVIEW and self.text is not None:
-            self._apply()
+        self._apply()
+        self.statusBar().showMessage(f"Added {found} item(s).", 4000)
 
     def _apply(self) -> None:
+        """Re-run the transform for the current selection and refresh both side-by-side views."""
         if self.text is None:
             return
         rejected = frozenset(s["text"] for s in self.spans if not s["keep"])
         try:
             self.result = self.scrubbers[self.detected_layers].apply(
-                self.text, self._kept_spans(), self.session, self.mode.currentText(), allow=rejected)
+                self.text, self._kept_spans(), self.session, MODE, allow=rejected)
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "Transform failed", f"{type(exc).__name__}: {exc}")
+            QMessageBox.critical(self, "Something went wrong", f"{type(exc).__name__}: {exc}")
             return
         self.orig_view.set_content(self.text, span_highlights(self.spans))
         self.out_view.set_content(self.result.scrubbed_text, output_highlights(self.result.scrubbed_text, self.session))
         rep = self.result.report
-        self.report_label.setText(f"actions: {rep['counts_by_action']} · leak-check fixes: {len(rep['leak_fixes'])}")
+        n = sum(1 for s in self.spans if s["keep"])
+        extra = len(rep["leak_fixes"])
+        msg = f"{n} item(s) will be hidden from the AI."
+        if extra:
+            msg += f" {extra} repeated mention(s) elsewhere in the text were caught as well."
+        self.report_label.setText(msg)
         self.preview_warnings.setText("\n".join(f"⚠ {w}" for w in rep["warnings"]))
-        self._refresh_session_label()
         self._rehydrate()
 
+    # ---- slots: copy / send ----------------------------------------------------------------------
     def _copy(self) -> None:
         if self.result is None:
             self._apply()
         QApplication.clipboard().setText(self._build_prompt())
-        self.statusBar().showMessage("Scrubbed prompt copied to clipboard.", 4000)
+        self.statusBar().showMessage("Scrubbed text copied to the clipboard.", 4000)
 
     def _send(self) -> None:
         if self.worker is not None and self.worker.isRunning():
@@ -624,7 +544,7 @@ class MainWindow(QMainWindow):
         if self.result is None:
             return
         self.send_btn.setEnabled(False)
-        self.statusBar().showMessage(f"Calling {self.client.provider}:{self.client.model}…")
+        self.statusBar().showMessage(f"Waiting for {self.client.provider}…")
         self.worker = SendWorker(self.client, self._build_prompt(), {"purpose": "app", "session_id": self.session.id})
         self.worker.done.connect(self._sent)
         self.worker.failed.connect(self._send_failed)
@@ -639,7 +559,7 @@ class MainWindow(QMainWindow):
     def _send_failed(self, msg: str) -> None:
         self.send_btn.setEnabled(self.client.provider != "dryrun")
         self.statusBar().clearMessage()
-        QMessageBox.critical(self, "LLM call failed", msg)
+        QMessageBox.critical(self, "Sending failed", msg)
 
     # ---- slots: response -------------------------------------------------------------------------
     def _rehydrate(self) -> None:
@@ -655,23 +575,24 @@ class MainWindow(QMainWindow):
             self.rehydrate_note.setText("\n".join(f"⚠ {w}" for w in warnings))
         else:
             self.rehydrate_note.setStyleSheet(OK_STYLE)
-            self.rehydrate_note.setText("All surrogates restored. Removed values (secrets, cards…) are never restored.")
+            self.rehydrate_note.setText("All stand-ins were replaced with the real details. "
+                                        "Removed values (secrets, card numbers…) are never put back.")
 
     # ---- session ---------------------------------------------------------------------------------
     def _new_session(self) -> None:
         self.session = Session()
         self.spans, self.text, self.result = [], None, None
         self.table.setRowCount(0)
-        self.review_view.set_content("", [])
         self.orig_view.set_content("", [])
         self.out_view.set_content("", [])
         self.response_box.clear()
         self.detect_warnings.clear()
+        self.report_label.clear()
+        self.preview_warnings.clear()
         self._set_review_enabled(False)
         self.tabs.setCurrentIndex(T_INPUT)
         self._input_changed()
-        self._refresh_session_label()
-        self.statusBar().showMessage("New session — all mappings forgotten.", 4000)
+        self.statusBar().showMessage("New session started. Earlier replacements have been forgotten.", 4000)
 
     def closeEvent(self, event) -> None:  # noqa: N802
         if self.worker is not None and self.worker.isRunning():
@@ -683,7 +604,7 @@ def main() -> None:
     app = QApplication(sys.argv)
     app.setStyleSheet(STYLE)
     win = MainWindow()
-    win.resize(1280, 820)
+    win.resize(1200, 820)
     win.show()
     sys.exit(app.exec())
 
