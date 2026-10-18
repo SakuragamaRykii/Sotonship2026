@@ -1,35 +1,41 @@
-"""PySide6 desktop UI for the local PII scrubber (replaces the Streamlit app).
+"""PySide6 desktop UI for the local PII scrubber.
 
     pip install PySide6
     python app/qt_app.py
 
-Three steps:
-  1. Input    - paste text and press Detect.
-  2. Review   - original and scrubbed text side by side, with the table of hidden items below.
-                Untick a row to leave that text as it is; copy the scrubbed text or send it.
-  3. Response - paste the AI's answer to get the real names and details put back.
+Two pages, chosen in the left sidebar:
 
-Everything runs locally; only the scrubbed prompt is ever sent, and only when you press Send.
-Detection and sending run in worker threads so the window never freezes (the first detection
-loads the local NER model, which takes a few seconds).
+  Scrub Text  Paste text into "Original Text" and press Update. The scrubbed text appears on the
+              right and every hidden item is listed in the table below (untick a row to leave that
+              text as it is). Pick a model from the dropdown and press Send.
+  Chat        A chat with the chosen model. Everything you type is scrubbed on this computer first,
+              and the model's replies have the real details put back before you see them.
+
+Only scrubbed text ever leaves the machine. API keys are read from the .env file in the repo root
+(ANTHROPIC_API_KEY / OPENAI_API_KEY); every payload sent is logged by the LLM client.
 """
 
 from __future__ import annotations
 
 import bisect
+import os
 import re
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QFontDatabase, QKeySequence, QShortcut, QTextCharFormat, QTextCursor
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import (
+    QColor, QFontDatabase, QIcon, QKeySequence, QPainter, QPalette, QPen, QPixmap, QShortcut, QTextCharFormat,
+    QTextCursor,
+)
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMainWindow,
-    QMessageBox, QPlainTextEdit, QPushButton, QSplitter, QTableWidget, QTableWidgetItem, QTabWidget,
-    QTextEdit, QToolTip, QVBoxLayout, QWidget,
+    QApplication, QButtonGroup, QCheckBox, QComboBox, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QMainWindow, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSplitter, QStackedWidget, QTableWidget,
+    QTableWidgetItem, QTextEdit, QToolButton, QToolTip, QVBoxLayout, QWidget,
 )
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
 from scrubber import Session, Span  # noqa: E402
 from scrubber.llm_client import LLMClient  # noqa: E402
@@ -47,35 +53,104 @@ TYPES = sorted(set(COLOURS) | set(default_policy().modes["balanced"]))
 BASE_LAYERS = ("L1", "L2", "L3", "L4")
 ADVANCED_LAYER = "L5"  # local LLM, switched on by the "use advanced local LLM" tick box
 MODE = "balanced"
-EXAMPLE = """Hi team, I'm Jane Doe (jane.doe+shop@gmail.com, 07911 123456). Ms Doe's NHS number is 943 476 5919.
-2024-05-01T10:00:00Z WARN auth failed user=jdoe92 src=10.0.0.12 token=sk-proj-Q1w2E3r4T5y6U7i8O9p0AsDfGhJk
-{"customer": "Jane Doe", "dob": "03/05/1988", "address": "12 High Street, Southampton SO17 1BJ", "note": "Jane asked about her refund"}"""
-
 WARMUP_TEXT = "Hi, I'm Jane Doe from Southampton. Email jane.doe@example.com or call 07911 123456."
-T_INPUT, T_REVIEW, T_RESPONSE = range(3)
 SURROGATE_SHAPES = [r"\[[A-Z_]+(?:_\d+)?(?:_REMOVED)?\]", r"\[AGE \d+-\d+\]"]
+PAGE_SCRUB, PAGE_CHAT = 0, 1
+
+# (label shown in the dropdown, provider, model). The list is extended with whatever .env selects.
+MODEL_CHOICES = [
+    ("Claude Opus 5.5", "anthropic", "claude-opus-5-5"),
+    ("Claude Sonnet 5.5", "anthropic", "claude-sonnet-5-5"),
+    ("Claude Haiku 5.5", "anthropic", "claude-haiku-5-5"),
+    ("GPT-4o", "openai", "gpt-4o"),
+    ("GPT-4o mini", "openai", "gpt-4o-mini"),
+    ("Local model (Ollama · qwen3:8b)", "ollama", "qwen3:8b"),
+    ("Preview only (nothing is sent)", "dryrun", "none"),
+]
+KEY_VARS = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
 
 STYLE = """
-QWidget { background:#1e1f22; color:#dfe1e5; font-size:13px; }
-QPlainTextEdit, QTextEdit, QTableWidget, QLineEdit, QComboBox {
-    background:#2b2d30; border:1px solid #3c3f41; border-radius:6px; padding:3px; }
-QPushButton { background:#3574f0; color:white; border:none; border-radius:6px; padding:7px 16px; }
-QPushButton:hover { background:#4a85f5; }
-QPushButton:disabled { background:#3c3f41; color:#7a7e85; }
-QPushButton#secondary { background:#3c3f41; color:#dfe1e5; }
-QPushButton#secondary:hover { background:#4a4d50; }
-QTabWidget::pane { border:1px solid #3c3f41; border-radius:6px; }
-QTabBar::tab { background:#2b2d30; padding:8px 18px; border-top-left-radius:6px; border-top-right-radius:6px; margin-right:2px; }
-QTabBar::tab:selected { background:#3574f0; color:white; }
-QTabBar::tab:disabled { color:#6b6f76; }
-QHeaderView::section { background:#2b2d30; border:none; border-bottom:1px solid #3c3f41; padding:5px; }
-QTableWidget { gridline-color:#33363a; }
-QToolTip { background:#2b2d30; color:#dfe1e5; border:1px solid #555; }
-QSplitter::handle { background:#2b2d30; }
+QToolTip { background:#2b2d31; color:#dfe1e5; border:1px solid #555; padding:3px; }
+QLabel { background:transparent; }
+QCheckBox { background:transparent; spacing:7px; }
+
+QFrame#sidebar { background:#1b1c20; border:none; border-right:1px solid #2a2c31; }
+QPushButton#nav { background:#2b2d31; color:#dfe1e5; border:none; border-top-right-radius:4px;
+    border-bottom-right-radius:4px; padding:9px 18px; font-size:18px; text-align:left; }
+QPushButton#nav:hover { background:#34363b; }
+QPushButton#nav:checked { background:#2f7bff; color:white; }
+QPushButton#ghost { background:transparent; color:#8b8e95; border:none; padding:8px 18px; text-align:left; }
+QPushButton#ghost:hover { color:#dfe1e5; }
+QPushButton#primary { background:#1f6bd6; color:white; border:none; border-radius:4px; padding:6px 22px;
+    font-size:16px; }
+QPushButton#primary:hover { background:#2f7bff; }
+QPushButton#primary:disabled { background:#2b2d31; color:#6f7379; }
+
+QLabel#tabLabel { background:#131418; color:#b4b7bd; font-size:18px; padding:4px 22px;
+    border-top-left-radius:8px; border-top-right-radius:8px; }
+QPlainTextEdit#pane { background:#131418; border:none; padding:6px; font-size:13px; color:#dfe1e5; }
+
+QTableWidget { background:#27292d; border:1px solid #34373c; font-size:12px; outline:none; color:#dfe1e5; }
+QTableWidget::item { padding-left:4px; }
+QTableWidget::item:selected { background:#33415c; color:#ffffff; }
+QTableWidget QComboBox { font-size:12px; padding:1px 6px; min-height:20px; }
+QHeaderView::section { background:#27292d; color:#c9ccd1; border:none; padding:6px; font-size:11px; }
+
+QLineEdit { background:#26282c; border:1px solid #34373c; border-radius:4px; padding:7px 10px; color:#dfe1e5; }
+QComboBox { background:#2b2d31; border:1px solid #3c3f44; border-radius:4px; padding:5px 10px; color:#dfe1e5; }
+QComboBox QAbstractItemView { background:#2b2d31; color:#dfe1e5; selection-background-color:#2f7bff; }
+
+QSplitter::handle:horizontal { background:#232833; }
+QSplitter::handle:vertical { background:#202226; }
+
+QScrollBar:vertical { background:#1d1e22; width:14px; margin:0; border:none; }
+QScrollBar::handle:vertical { background:#5b5e64; min-height:30px; margin:2px; border-radius:5px; }
+QScrollBar::handle:vertical:hover { background:#7a7d84; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background:none; }
+QScrollBar:horizontal { background:#1d1e22; height:14px; margin:0; border:none; }
+QScrollBar::handle:horizontal { background:#5b5e64; min-width:30px; margin:2px; border-radius:5px; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width:0; }
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background:none; }
+
+QStatusBar { border-top:1px solid #2f3136; color:#9a9da3; }
+QStatusBar::item { border:none; }
+
+QScrollArea#chatScroll { background:transparent; border:none; }
+QWidget#chatHolder { background:transparent; }
+QLabel#userBubble { background:#26364f; color:#e8eefc; border-radius:16px; padding:12px 16px; font-size:14px; }
+QLabel#assistantText { color:#e6e8eb; font-size:14px; }
+QLabel#caption { color:#7d8189; font-size:11px; }
+QLabel#thinking { color:#8b8e95; font-size:14px; }
+QLabel#chatError { color:#ff8787; font-size:14px; }
+QLabel#emptyChat { color:#9a9da3; font-size:22px; padding-top:140px; }
+QLabel#chatModel { color:#9a9da3; font-size:13px; }
+QFrame#pill { background:#2b2d31; border:1px solid #3a3d42; border-radius:22px; }
+QTextEdit#chatInput { background:transparent; border:none; font-size:15px; color:#e6e8eb; padding-top:6px; }
+QPushButton#chatSend { background:#2f7bff; color:white; border:none; border-radius:18px; font-size:18px;
+    font-weight:bold; min-width:36px; max-width:36px; min-height:36px; max-height:36px; padding:0; }
+QPushButton#chatSend:disabled { background:#3a3d42; color:#6f7379; }
+QToolButton#iconBtn { background:transparent; border:none; border-radius:6px; padding:4px; }
+QToolButton#iconBtn:hover { background:#34363b; }
 """
-WARN_STYLE = "color:#ffd43b;"
-OK_STYLE = "color:#69db7c;"
-MUTED_STYLE = "color:#9a9da3;"
+
+
+def copy_icon(colour: str = "#c9ccd1", size: int = 20) -> QIcon:
+    """Two overlapping rounded rectangles, drawn in code so no image files are needed."""
+    scale = 2
+    pm = QPixmap(size * scale, size * scale)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    pen = QPen(QColor(colour))
+    pen.setWidthF(1.6 * scale)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    s = size * scale
+    p.drawRoundedRect(QRectF(s * 0.38, s * 0.10, s * 0.50, s * 0.56), 2 * scale, 2 * scale)
+    p.drawRoundedRect(QRectF(s * 0.12, s * 0.32, s * 0.50, s * 0.56), 2 * scale, 2 * scale)
+    p.end()
+    return QIcon(pm)
 
 
 # ---- highlighting ---------------------------------------------------------------------------------
@@ -99,25 +174,45 @@ class _Offsets:
         return j if self.identity else bisect.bisect_right(self.prefix, j) - 1
 
 
-class HighlightView(QPlainTextEdit):
-    """Read-only text view with coloured regions and a hover tooltip per region."""
+def _non_overlapping(items: list[tuple[int, int, str, str]]) -> list[tuple[int, int, str, str]]:
+    out, pos = [], 0
+    for h in sorted(items, key=lambda x: x[0]):
+        if h[0] < pos or h[1] <= h[0]:
+            continue
+        out.append(h)
+        pos = h[1]
+    return out
 
-    def __init__(self) -> None:
+
+class HighlightView(QPlainTextEdit):
+    """Text box with coloured regions and a hover tooltip per region.
+
+    Read-only (scrubbed text) or editable (the Original Text box). In the editable box the user's
+    text is never replaced; only the highlights are refreshed, and right-clicking a selection offers
+    "Scrub selection as …" for anything the detectors missed.
+    """
+
+    addRequested = Signal(str, str)  # selected text, type
+
+    def __init__(self, editable: bool = False, placeholder: str = "") -> None:
         super().__init__()
-        self.setReadOnly(True)
+        self.setObjectName("pane")
+        self.setReadOnly(not editable)
         self.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        if placeholder:
+            self.setPlaceholderText(placeholder)
         self.viewport().setMouseTracking(True)
+        self.can_add = False  # set by the window: True while the highlights match the text
         self._hl: list[tuple[int, int, str, str]] = []
         self._starts: list[int] = []
         self._map = _Offsets("")
 
-    def set_content(self, text: str, highlights: list[tuple[int, int, str, str]]) -> None:
-        """highlights: (start, end, colour, tooltip) in code-point offsets into `text`."""
-        scroll = self.verticalScrollBar().value()  # keep the reader's place when the view refreshes
-        self.setPlainText(text)
+    def _paint(self, highlights: list[tuple[int, int, str, str]]) -> None:
+        text = self.toPlainText()
         self._map = _Offsets(text)
-        self._hl = sorted(_non_overlapping(highlights), key=lambda h: h[0])
+        valid = [h for h in highlights if 0 <= h[0] < h[1] <= len(text)]
+        self._hl = sorted(_non_overlapping(valid), key=lambda h: h[0])
         self._starts = [h[0] for h in self._hl]
         selections = []
         for start, end, colour, _ in self._hl:
@@ -131,7 +226,21 @@ class HighlightView(QPlainTextEdit):
             sel.cursor, sel.format = cur, fmt
             selections.append(sel)
         self.setExtraSelections(selections)
+
+    def set_content(self, text: str, highlights: list[tuple[int, int, str, str]]) -> None:
+        """Replace the text and highlight it. highlights: (start, end, colour, tooltip) code-point offsets."""
+        scroll = self.verticalScrollBar().value()  # keep the reader's place when the view refreshes
+        self.setPlainText(text)
+        self._paint(highlights)
         self.verticalScrollBar().setValue(scroll)
+
+    def set_highlights(self, highlights: list[tuple[int, int, str, str]]) -> None:
+        """Highlight the text as it currently is, without touching it."""
+        self._paint(highlights)
+
+    def clear_highlights(self) -> None:
+        self._hl, self._starts = [], []
+        self.setExtraSelections([])
 
     def reveal(self, start: int) -> None:
         cur = QTextCursor(self.document())
@@ -148,15 +257,17 @@ class HighlightView(QPlainTextEdit):
         else:
             QToolTip.hideText()
 
-
-def _non_overlapping(items: list[tuple[int, int, str, str]]) -> list[tuple[int, int, str, str]]:
-    out, pos = [], 0
-    for h in sorted(items, key=lambda x: x[0]):
-        if h[0] < pos or h[1] <= h[0]:
-            continue
-        out.append(h)
-        pos = h[1]
-    return out
+    def contextMenuEvent(self, e) -> None:  # noqa: N802
+        menu = self.createStandardContextMenu()
+        sel = self.textCursor().selectedText().replace("\u2029", "\n").strip()
+        if not self.isReadOnly() and self.can_add and sel:
+            menu.addSeparator()
+            sub = menu.addMenu("Scrub selection as")
+            for t in TYPES:
+                act = sub.addAction(t)
+                act.triggered.connect(lambda _=False, t=t, s=sel: self.addRequested.emit(s, t))
+        menu.exec(e.globalPos())
+        menu.deleteLater()
 
 
 def span_highlights(spans: list[dict]) -> list[tuple[int, int, str, str]]:
@@ -174,7 +285,37 @@ def output_highlights(text: str, session: Session) -> list[tuple[int, int, str, 
     return out
 
 
+def build_prompt(turns: list[tuple[str, str]]) -> str:
+    """One scrubbed message is sent as-is; a longer conversation is sent as a transcript."""
+    if len(turns) == 1:
+        return turns[0][1]
+    lines = ["Here is the conversation so far. Reply as the assistant to the last user message.", ""]
+    for role, text in turns:
+        lines += [f"{'User' if role == 'user' else 'Assistant'}: {text}", ""]
+    lines.append("Assistant:")
+    return "\n".join(lines)
+
+
 # ---- workers --------------------------------------------------------------------------------------
+
+
+class LoadWorker(QThread):
+    """Builds the default pipeline at launch so the first Update is instant."""
+
+    done = Signal(object, object)  # layers, scrubber
+    failed = Signal(str)
+
+    def __init__(self, layers: tuple[str, ...]) -> None:
+        super().__init__()
+        self.layers = layers
+
+    def run(self) -> None:
+        try:
+            scrubber = Scrubber(list(self.layers))
+            scrubber.detect(WARMUP_TEXT)  # forces any lazily-loaded model to load now, not on first use
+            self.done.emit(self.layers, scrubber)
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(f"{type(exc).__name__}: {exc}")
 
 
 class DetectWorker(QThread):
@@ -194,38 +335,66 @@ class DetectWorker(QThread):
             self.failed.emit(f"{type(exc).__name__}: {exc}")
 
 
-class LoadWorker(QThread):
-    """Builds the default pipeline at launch so the first Detect is instant."""
+class ChatWorker(QThread):
+    """Scrub (if needed) -> send -> re-hydrate, all off the UI thread.
 
-    done = Signal(object, object)  # layers, scrubber
+    `scrub_text` is raw text that still needs scrubbing (a typed chat message, or the instruction box);
+    `pre_scrubbed` is text that has already been scrubbed (the Scrub Text page output). History holds
+    scrubbed text only, so nothing unscrubbed is ever re-sent.
+    """
+
+    done = Signal(object, str, str, str, int, object)  # scrubber, sent message, raw reply, restored, n scrubbed, warnings
     failed = Signal(str)
 
-    def __init__(self, layers: tuple[str, ...]) -> None:
+    def __init__(self, layers, cached, scrub_text, pre_scrubbed, history, client, session, meta) -> None:
         super().__init__()
-        self.layers = layers
+        self.layers, self.cached = layers, cached
+        self.scrub_text, self.pre_scrubbed = scrub_text, pre_scrubbed
+        self.history, self.client, self.session, self.meta = history, client, session, meta
 
     def run(self) -> None:
         try:
-            scrubber = Scrubber(list(self.layers))
-            scrubber.detect(WARMUP_TEXT)  # forces any lazily-loaded model to load now, not on first Detect
-            self.done.emit(self.layers, scrubber)
+            parts: list[str] = []
+            n = 0
+            scrubber = self.cached
+            if self.scrub_text.strip():
+                scrubber = scrubber or Scrubber(list(self.layers))
+                spans, _ = scrubber.detect(self.scrub_text)
+                res = scrubber.apply(self.scrub_text, spans, self.session, MODE)
+                parts.append(res.scrubbed_text)
+                n = len(spans)
+            if self.pre_scrubbed:
+                parts.append(self.pre_scrubbed)
+            message = "\n\n".join(parts)
+            prompt = build_prompt(self.history + [("user", message)])
+            raw = self.client.send(prompt, self.meta)
+            restored, warnings = rehydrate(raw, self.session)
+            self.done.emit(scrubber, message, raw, restored, n, warnings)
         except Exception as exc:  # noqa: BLE001
             self.failed.emit(f"{type(exc).__name__}: {exc}")
 
 
-class SendWorker(QThread):
-    done = Signal(str)
-    failed = Signal(str)
+class ChatInput(QTextEdit):
+    """Auto-growing message box: Enter sends, Shift+Enter starts a new line."""
 
-    def __init__(self, client: LLMClient, prompt: str, meta: dict) -> None:
+    submitted = Signal()
+
+    def __init__(self) -> None:
         super().__init__()
-        self.client, self.prompt, self.meta = client, prompt, meta
+        self.setObjectName("chatInput")
+        self.setAcceptRichText(False)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setFixedHeight(40)
+        self.document().documentLayout().documentSizeChanged.connect(self._resize)
 
-    def run(self) -> None:
-        try:
-            self.done.emit(self.client.send(self.prompt, self.meta))
-        except Exception as exc:  # noqa: BLE001
-            self.failed.emit(f"{type(exc).__name__}: {exc}")
+    def _resize(self, size) -> None:
+        self.setFixedHeight(int(max(40, min(150, size.height() + 14))))
+
+    def keyPressEvent(self, e) -> None:  # noqa: N802
+        if e.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not (e.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+            self.submitted.emit()
+            return
+        super().keyPressEvent(e)
 
 
 # ---- main window ----------------------------------------------------------------------------------
@@ -241,232 +410,366 @@ class MainWindow(QMainWindow):
         self.text: str | None = None  # the text the spans were detected on
         self.detected_layers: tuple[str, ...] = ()
         self.result = None
+        self.history: list[tuple[str, str]] = []  # (role, scrubbed text) sent to the model so far
         self._filling = False
+        self._loading = True
+        self._detecting = False
+        self._busy = False
+        self._detect_warn = ""
         self._pending: tuple[tuple[str, ...], str] | None = None
+        self._pending_bubble: tuple[QLabel, QLabel] | None = None
+        self._thinking: QWidget | None = None
+        self._chat_widgets: list[QWidget] = []
         self.worker: QThread | None = None
-        try:
-            self.client = LLMClient()
-        except Exception:  # noqa: BLE001 - bad LLM_PROVIDER in .env: fall back to dry-run
-            self.client = LLMClient("dryrun")
 
+        # ---- model choices (anything configured in .env is added / pre-selected) ----
+        self.clients: dict[tuple[str, str], LLMClient] = {}
+        try:
+            env_client = LLMClient()
+        except Exception:  # noqa: BLE001 - bad LLM_PROVIDER in .env: fall back to preview-only
+            env_client = LLMClient("dryrun")
+        self.choices = list(MODEL_CHOICES)
+        env_key = (env_client.provider, env_client.model)
+        idx = next((i for i, (_, p, m) in enumerate(self.choices) if (p, m) == env_key), None)
+        if idx is None:
+            self.choices.insert(0, (f"{env_key[0]} · {env_key[1]} (from .env)", *env_key))
+            idx = 0
+        self.clients[env_key] = env_client
+        self.client = env_client
+
+        # ---- layout: sidebar | pages ----
         root = QWidget()
         self.setCentralWidget(root)
-        main = QVBoxLayout(root)
+        outer = QHBoxLayout(root)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addWidget(self._build_sidebar())
+        self.pages = QStackedWidget()
+        self.pages.addWidget(self._build_scrub_page())
+        self.pages.addWidget(self._build_chat_page())
+        outer.addWidget(self.pages, 1)
 
-        header = QHBoxLayout()
-        titles = QVBoxLayout()
-        title = QLabel("🛡️  Local PII scrubber")
-        title.setStyleSheet("font-size:20px;font-weight:600;")
-        sub = QLabel("Detection runs on this machine. Only the scrubbed text is ever sent to a model.")
-        sub.setStyleSheet(MUTED_STYLE)
-        titles.addWidget(title)
-        titles.addWidget(sub)
-        header.addLayout(titles, 1)
-        new = QPushButton("New session")
-        new.setObjectName("secondary")
-        new.setToolTip("Forget every replacement made so far and start fresh")
-        new.clicked.connect(self._new_session)
-        header.addWidget(new, 0, Qt.AlignmentFlag.AlignTop)
-        main.addLayout(header)
+        for label, _, _ in self.choices:
+            self.model_combo.addItem(label)
+        self.model_combo.setCurrentIndex(idx)
+        self.model_combo.currentIndexChanged.connect(self._model_changed)
+        self._model_changed(idx)
 
-        self.tabs = QTabWidget()
-        self.tabs.addTab(self._build_input_tab(), "1 · Input")
-        self.tabs.addTab(self._build_review_tab(), "2 · Review")
-        self.tabs.addTab(self._build_response_tab(), "3 · Response")
-        self._set_review_enabled(False)
-        main.addWidget(self.tabs, 1)
-        # Load the detection model in the background so the user can start typing right away.
+        QShortcut(QKeySequence("Ctrl+Return"), self, activated=self._update)
+
+        # ---- load the detection model in the background; note it in the bottom-right corner ----
         self.model_status = QLabel("⏳ Loading detection model…")
-        self.model_status.setStyleSheet(WARN_STYLE)
-        self.statusBar().addPermanentWidget(self.model_status)  # bottom-right corner
-        self.detect_btn.setEnabled(False)
-        self.detect_btn.setToolTip("Available once the detection model has finished loading")
+        self.model_status.setStyleSheet("color:#ffd43b;")
+        self.statusBar().addPermanentWidget(self.model_status)
+        self.update_btn.setToolTip("Available once the detection model has finished loading")
         self.loader = LoadWorker(tuple(sorted(BASE_LAYERS)))
         self.loader.done.connect(self._preloaded)
         self.loader.failed.connect(self._preload_failed)
         self.loader.start()
+        self._sync_controls()
 
     # ---- UI construction -------------------------------------------------------------------------
-    def _build_input_tab(self) -> QWidget:
-        w = QWidget()
-        v = QVBoxLayout(w)
-        v.addWidget(QLabel("Paste your text here (messages, logs, JSON, anything)"))
-        self.input = QPlainTextEdit()
-        self.input.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
-        self.input.setPlainText(EXAMPLE)
-        self.input.textChanged.connect(self._input_changed)
-        v.addWidget(self.input, 1)
+    def _build_sidebar(self) -> QWidget:
+        bar = QFrame()
+        bar.setObjectName("sidebar")
+        bar.setFixedWidth(185)
+        v = QVBoxLayout(bar)
+        v.setContentsMargins(0, 52, 0, 12)
+        v.setSpacing(28)
 
-        row = QHBoxLayout()
-        self.detect_btn = QPushButton("Detect")
-        self.detect_btn.clicked.connect(self._detect)
-        QShortcut(QKeySequence("Ctrl+Return"), self, activated=self._detect)
-        row.addWidget(self.detect_btn)
-        self.advanced = QCheckBox("use advanced local LLM")
-        self.advanced.setToolTip("Slower, but can spot more subtle details. Runs entirely on this computer.")
-        row.addWidget(self.advanced)
-        self.input_note = QLabel()
-        self.input_note.setStyleSheet(WARN_STYLE)
-        row.addWidget(self.input_note, 1)
-        v.addLayout(row)
+        self.nav_scrub = QPushButton("Scrub Text")
+        self.nav_chat = QPushButton("Chat")
+        group = QButtonGroup(self)
+        for i, b in enumerate((self.nav_scrub, self.nav_chat)):
+            b.setObjectName("nav")
+            b.setCheckable(True)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            group.addButton(b)
+            b.clicked.connect(lambda _=False, i=i: self._show_page(i))
+            v.addWidget(b, 0, Qt.AlignmentFlag.AlignLeft)
+        self.nav_scrub.setChecked(True)
+        # Both buttons share one resting width (wide enough for the longer label); the selected one is stretched.
+        self._nav_buttons = (self.nav_scrub, self.nav_chat)
+        self._nav_base = max(b.sizeHint().width() for b in self._nav_buttons)
+        for b in self._nav_buttons:
+            b.toggled.connect(self._restyle_nav)
+        self._restyle_nav()
+        v.addStretch(1)
 
-        self.detect_warnings = QLabel()
-        self.detect_warnings.setStyleSheet(WARN_STYLE)
-        self.detect_warnings.setWordWrap(True)
-        v.addWidget(self.detect_warnings)
-        return w
+        new = QPushButton("New session")
+        new.setObjectName("ghost")
+        new.setToolTip("Forget every replacement made so far and start fresh")
+        new.clicked.connect(self._new_session)
+        v.addWidget(new)
+        return bar
 
-    def _build_review_tab(self) -> QWidget:
-        w = QWidget()
-        v = QVBoxLayout(w)
-        hint = QLabel("Check what will be hidden before anything is sent. Untick a row to leave that text as it is. "
-                      "Hover a highlight to see why it was flagged.")
-        hint.setWordWrap(True)
-        hint.setStyleSheet(MUTED_STYLE)
-        v.addWidget(hint)
+    def _build_scrub_page(self) -> QWidget:
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setContentsMargins(14, 10, 12, 6)
+        v.setSpacing(8)
 
         split = QSplitter(Qt.Orientation.Vertical)
+        split.setHandleWidth(6)
 
-        # top: original | scrubbed, side by side
-        top = QSplitter(Qt.Orientation.Horizontal)
-        for attr, title in (("orig_view", "Original (stays here)"), ("out_view", "Scrubbed text (what gets sent)")):
-            box = QWidget()
-            bv = QVBoxLayout(box)
-            bv.setContentsMargins(0, 0, 0, 0)
-            lab = QLabel(title)
-            lab.setStyleSheet("font-weight:600;")
-            view = HighlightView()
-            setattr(self, attr, view)
-            bv.addWidget(lab)
-            bv.addWidget(view, 1)
-            top.addWidget(box)
-        split.addWidget(top)
+        # top: Original Text | Update + copy + scrubbed text
+        panes = QSplitter(Qt.Orientation.Horizontal)
+        panes.setHandleWidth(26)
 
-        # bottom: the table of scrubbed material, then the manual-add row
-        lower = QWidget()
-        lv = QVBoxLayout(lower)
+        left = QWidget()
+        lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 0, 0)
+        lv.setSpacing(0)
+        head = QHBoxLayout()
+        head.setContentsMargins(0, 0, 0, 0)
+        title = QLabel("Original Text")
+        title.setObjectName("tabLabel")
+        head.addWidget(title)
+        head.addStretch(1)
+        lv.addLayout(head)
+        self.orig_view = HighlightView(
+            editable=True,
+            placeholder="Paste your text here, then press Update.\n\n"
+                        "Tip: select something the detector missed, right-click and choose “Scrub selection as”.")
+        self.orig_view.textChanged.connect(self._orig_changed)
+        self.orig_view.addRequested.connect(self._add_selection)
+        lv.addWidget(self.orig_view, 1)
+        panes.addWidget(left)
+
+        right = QWidget()
+        rv = QVBoxLayout(right)
+        rv.setContentsMargins(0, 0, 0, 0)
+        rv.setSpacing(0)
+        bar = QHBoxLayout()
+        bar.setContentsMargins(0, 0, 0, 4)
+        bar.setSpacing(12)
+        self.update_btn = QPushButton("Update")
+        self.update_btn.setObjectName("primary")
+        self.update_btn.clicked.connect(self._update)
+        self.copy_btn = QToolButton()
+        self.copy_btn.setObjectName("iconBtn")
+        self.copy_btn.setIcon(copy_icon())
+        self.copy_btn.setIconSize(QSize(22, 22))
+        self.copy_btn.setToolTip("Copy the scrubbed text")
+        self.copy_btn.clicked.connect(self._copy)
+        self.advanced = QCheckBox("use advanced local LLM")
+        self.advanced.setToolTip("Slower, but can spot more subtle details. Runs entirely on this computer.")
+        bar.addWidget(self.update_btn)
+        bar.addWidget(self.copy_btn)
+        bar.addStretch(1)
+        bar.addWidget(self.advanced)
+        rv.addLayout(bar)
+        self.out_view = HighlightView(placeholder="The scrubbed text will appear here.")
+        rv.addWidget(self.out_view, 1)
+        panes.addWidget(right)
+        panes.setSizes([520, 520])
+        split.addWidget(panes)
+
+        # bottom: the table of hidden items, extended to fill the space above the instruction row
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(["scrub?", "type", "text", "source", "conf.", "reason"])
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(28)
+        self.table.setShowGrid(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         hdr = self.table.horizontalHeader()
-        hdr.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
+        for col, width in ((0, 62), (1, 118), (3, 64), (4, 56)):
+            hdr.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(col, width)
         hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
         self.table.itemChanged.connect(self._item_changed)
         self.table.currentCellChanged.connect(self._row_selected)
-        lv.addWidget(self.table, 1)
-
-        add = QHBoxLayout()
-        self.manual_text = QLineEdit()
-        self.manual_text.setPlaceholderText("Missed something? Type the exact text here (every occurrence is added)")
-        self.manual_text.returnPressed.connect(self._add_manual)
-        self.manual_type = QComboBox()
-        self.manual_type.addItems(TYPES)
-        self.manual_type.setCurrentText("person")
-        btn = QPushButton("Add")
-        btn.clicked.connect(self._add_manual)
-        add.addWidget(self.manual_text, 1)
-        add.addWidget(self.manual_type)
-        add.addWidget(btn)
-        lv.addLayout(add)
-        split.addWidget(lower)
-        split.setSizes([300, 280])
+        split.addWidget(self.table)
+        split.setStretchFactor(0, 3)
+        split.setStretchFactor(1, 2)
+        split.setSizes([390, 280])
         v.addWidget(split, 1)
-
-        self.report_label = QLabel()
-        self.report_label.setStyleSheet(MUTED_STYLE)
-        self.preview_warnings = QLabel()
-        self.preview_warnings.setStyleSheet(WARN_STYLE)
-        self.preview_warnings.setWordWrap(True)
-        v.addWidget(self.report_label)
-        v.addWidget(self.preview_warnings)
 
         self.instruction = QLineEdit()
         self.instruction.setPlaceholderText("Instruction to add in front of the text (optional)")
         v.addWidget(self.instruction)
 
         row = QHBoxLayout()
-        copy = QPushButton("Copy scrubbed text")
-        copy.setObjectName("secondary")
-        copy.clicked.connect(self._copy)
-        self.send_btn = QPushButton(f"Send via {self.client.provider}")
-        self.send_btn.setEnabled(self.client.provider != "dryrun")
-        self.send_btn.setToolTip("Set LLM_PROVIDER and an API key in .env to enable sending")
+        row.setSpacing(8)
+        self.model_combo = QComboBox()
+        self.model_combo.setMinimumHeight(34)
+        self.model_combo.setToolTip("Choose which AI model the scrubbed text is sent to")
+        self.send_btn = QPushButton("Send")
+        self.send_btn.setObjectName("primary")
+        self.send_btn.setMinimumHeight(34)
+        self.send_btn.setMinimumWidth(140)
         self.send_btn.clicked.connect(self._send)
-        row.addWidget(copy)
+        row.addWidget(self.model_combo, 1)
         row.addWidget(self.send_btn)
-        row.addStretch(1)
         v.addLayout(row)
-        return w
+        return page
 
-    def _build_response_tab(self) -> QWidget:
-        w = QWidget()
-        v = QVBoxLayout(w)
-        v.addWidget(QLabel("Paste (or receive) the AI's response"))
-        self.response_box = QPlainTextEdit()
-        self.response_box.textChanged.connect(self._rehydrate)
-        v.addWidget(self.response_box, 1)
-        lab = QLabel("With the real details put back (stays on this computer)")
-        lab.setStyleSheet("font-weight:600;")
-        v.addWidget(lab)
-        self.restored_view = QPlainTextEdit()
-        self.restored_view.setReadOnly(True)
-        v.addWidget(self.restored_view, 1)
-        self.rehydrate_note = QLabel()
-        self.rehydrate_note.setWordWrap(True)
-        v.addWidget(self.rehydrate_note)
-        return w
+    def _build_chat_page(self) -> QWidget:
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(0)
 
-    # ---- helpers ---------------------------------------------------------------------------------
-    def _set_review_enabled(self, on: bool) -> None:
-        for i in (T_REVIEW, T_RESPONSE):
-            self.tabs.setTabEnabled(i, on)
+        head = QHBoxLayout()
+        head.setContentsMargins(24, 10, 18, 0)
+        self.chat_model_label = QLabel()
+        self.chat_model_label.setObjectName("chatModel")
+        new = QPushButton("New chat")
+        new.setObjectName("ghost")
+        new.clicked.connect(self._new_chat)
+        head.addWidget(self.chat_model_label)
+        head.addStretch(1)
+        head.addWidget(new)
+        v.addLayout(head)
+
+        self.chat_scroll = QScrollArea()
+        self.chat_scroll.setObjectName("chatScroll")
+        self.chat_scroll.setWidgetResizable(True)
+        self.chat_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.chat_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        holder = QWidget()
+        holder.setObjectName("chatHolder")
+        hl = QHBoxLayout(holder)
+        hl.setContentsMargins(24, 8, 24, 16)
+        column = QWidget()
+        column.setMaximumWidth(780)
+        self.chat_layout = QVBoxLayout(column)
+        self.chat_layout.setContentsMargins(0, 0, 0, 0)
+        self.chat_layout.setSpacing(18)
+        self.chat_empty = QLabel("What would you like to ask?\nEverything you type is scrubbed on this computer first.")
+        self.chat_empty.setObjectName("emptyChat")
+        self.chat_empty.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+        self.chat_layout.addWidget(self.chat_empty)
+        self.chat_layout.addStretch(1)
+        hl.addStretch(1)
+        hl.addWidget(column, 100)
+        hl.addStretch(1)
+        self.chat_scroll.setWidget(holder)
+        v.addWidget(self.chat_scroll, 1)
+
+        bottom = QVBoxLayout()
+        bottom.setContentsMargins(24, 0, 24, 14)
+        bottom.setSpacing(6)
+        note = QLabel("Messages are scrubbed on this computer before they are sent. Check important info.")
+        note.setObjectName("caption")
+        note.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        bottom.addWidget(note)
+        pill = QFrame()
+        pill.setObjectName("pill")
+        pill.setMaximumWidth(780)
+        ph = QHBoxLayout(pill)
+        ph.setContentsMargins(20, 4, 8, 4)
+        self.chat_input = ChatInput()
+        self.chat_input.submitted.connect(self._chat_submit)
+        self.chat_input.textChanged.connect(self._sync_controls)
+        self.chat_send = QPushButton("↑")
+        self.chat_send.setObjectName("chatSend")
+        self.chat_send.clicked.connect(self._chat_submit)
+        ph.addWidget(self.chat_input, 1)
+        ph.addWidget(self.chat_send, 0, Qt.AlignmentFlag.AlignBottom)
+        pill_row = QHBoxLayout()
+        pill_row.setContentsMargins(0, 0, 0, 0)
+        pill_row.addStretch(1)
+        pill_row.addWidget(pill, 100)
+        pill_row.addStretch(1)
+        bottom.addLayout(pill_row)
+        v.addLayout(bottom)
+        return page
+
+    # ---- navigation / state ----------------------------------------------------------------------
+    def _restyle_nav(self, *_: object) -> None:
+        for b in self._nav_buttons:
+            b.setFixedWidth(self._nav_base + (24 if b.isChecked() else 0))
+
+    def _show_page(self, i: int) -> None:
+        self.pages.setCurrentIndex(i)
+        (self.nav_scrub, self.nav_chat)[i].setChecked(True)
 
     def _layers(self) -> tuple[str, ...]:
         return tuple(sorted(BASE_LAYERS + ((ADVANCED_LAYER,) if self.advanced.isChecked() else ())))
 
-    def _kept_spans(self) -> list[Span]:
-        return [Span(**{k: v for k, v in s.items() if k != "keep"}) for s in self.spans if s["keep"]]
+    def _sync_controls(self) -> None:
+        idle = not self._busy and not self._detecting
+        can_send = self.client.provider != "dryrun"
+        self.update_btn.setEnabled(not self._loading and idle)
+        self.send_btn.setEnabled(can_send and idle and self.result is not None and not self._loading)
+        self.send_btn.setToolTip(
+            "Choose a model first (the preview-only option never sends anything)" if not can_send
+            else "Press Update first" if self.result is None else f"Send the scrubbed text to {self._model_label()}")
+        self.chat_send.setEnabled(can_send and idle and not self._loading and bool(self.chat_input.toPlainText().strip()))
 
-    def _build_prompt(self) -> str:
-        ins = self.instruction.text().strip()
-        return (ins + "\n\n" if ins else "") + (self.result.scrubbed_text if self.result else "")
+    def _model_label(self) -> str:
+        return self.choices[self.model_combo.currentIndex()][0]
 
-    # ---- slots: input / detect -------------------------------------------------------------------
-    def _input_changed(self) -> None:
-        stale = self.text is not None and self.input.toPlainText() != self.text
-        self.input_note.setText("The text has changed since the last detection. Press Detect to refresh." if stale else "")
+    def _model_changed(self, i: int) -> None:
+        _, provider, model = self.choices[i]
+        if (provider, model) not in self.clients:
+            self.clients[(provider, model)] = LLMClient(provider, model)
+        self.client = self.clients[(provider, model)]
+        label = self.choices[i][0]
+        if provider == "dryrun":
+            self.chat_model_label.setText("No model chosen. Pick one on the Scrub Text page to start chatting.")
+            self.chat_input.setPlaceholderText("Choose a model on the Scrub Text page first")
+        else:
+            self.chat_model_label.setText(f"Chatting with {label}")
+            self.chat_input.setPlaceholderText(f"Message {label}")
+        self._sync_controls()
 
+    def _missing_key(self) -> bool:
+        var = KEY_VARS.get(self.client.provider)
+        if var and not os.environ.get(var):
+            QMessageBox.information(
+                self, "API key needed",
+                f"To use {self._model_label()}, add your API key to the file\n{ROOT / '.env'}\n\n"
+                f"{var}=your-key-here\n\nthen restart the app.")
+            return True
+        return False
+
+    # ---- background model loading ----------------------------------------------------------------
     def _preloaded(self, layers: tuple[str, ...], scrubber: Scrubber) -> None:
         self.scrubbers[layers] = scrubber
-        self.detect_btn.setToolTip("")
-        self.detect_btn.setEnabled(True)
-        self.model_status.setStyleSheet(OK_STYLE)
+        self._loading = False
+        self.update_btn.setToolTip("")
+        self.model_status.setStyleSheet("color:#69db7c;")
         self.model_status.setText("✓ Model ready")
         QTimer.singleShot(4000, self.model_status.clear)
+        self._sync_controls()
 
     def _preload_failed(self, msg: str) -> None:
-        # Not fatal: Detect falls back to loading the model on first use.
-        self.detect_btn.setToolTip("")
-        self.detect_btn.setEnabled(True)
-        self.model_status.setText("⚠ Model will load on first Detect")
-        self.statusBar().showMessage("The model couldn't be preloaded; it will load when you press Detect.", 8000)
-        self.detect_warnings.setText(f"⚠ Preload failed: {msg}")
+        # Not fatal: Update falls back to loading the model on first use.
+        self._loading = False
+        self.update_btn.setToolTip("")
+        self.model_status.setText("⚠ Model will load on first Update")
+        self.statusBar().showMessage(f"Preload failed: {msg}", 10000)
+        self._sync_controls()
 
-    def _detect(self) -> None:
-        if self.loader.isRunning() or (self.worker is not None and self.worker.isRunning()):
+    # ---- scrub page: input / detect --------------------------------------------------------------
+    def _orig_changed(self) -> None:
+        if self.text is None:
             return
-        text = self.input.toPlainText()
+        fresh = self.orig_view.toPlainText() == self.text
+        self.orig_view.can_add = fresh
+        if fresh:
+            self.orig_view.set_highlights(span_highlights(self.spans))
+        else:
+            self.orig_view.clear_highlights()
+            self.statusBar().showMessage("The text has changed. Press Update to refresh.")
+
+    def _update(self) -> None:
+        if self._loading or self._detecting or self._busy:
+            return
+        text = self.orig_view.toPlainText()
         if not text.strip():
-            self.statusBar().showMessage("Nothing to detect. Paste some text first.", 4000)
+            self.statusBar().showMessage("Paste some text into Original Text first.", 4000)
             return
         layers = self._layers()
         self._pending = (layers, text)
-        self.detect_btn.setEnabled(False)
-        self.statusBar().showMessage("Detecting… (the first run loads the local model and can take a moment)")
+        self._detecting = True
+        self._sync_controls()
+        self.statusBar().showMessage("Detecting…")
         self.worker = DetectWorker(layers, self.scrubbers.get(layers), text)
         self.worker.done.connect(self._detected)
         self.worker.failed.connect(self._detect_failed)
@@ -478,22 +781,19 @@ class MainWindow(QMainWindow):
         self.scrubbers[layers] = scrubber
         self.detected_layers, self.text = layers, text
         self.spans = [{**s.model_dump(), "keep": True} for s in sorted(spans, key=lambda s: s.start)]
-        self.result = None
-        self.detect_warnings.setText("\n".join(f"⚠ {w}" for w in warnings))
-        self.detect_btn.setEnabled(True)
-        self._input_changed()
-        self._set_review_enabled(True)
+        self._detect_warn = " · ".join(warnings)
+        self._detecting = False
         self._fill_table()
         self._apply()
-        self.statusBar().showMessage(f"Found {len(self.spans)} item(s) to hide.", 5000)
-        self.tabs.setCurrentIndex(T_REVIEW)
+        self._orig_changed()
 
     def _detect_failed(self, msg: str) -> None:
-        self.detect_btn.setEnabled(True)
+        self._detecting = False
+        self._sync_controls()
         self.statusBar().clearMessage()
         QMessageBox.critical(self, "Detection failed", msg)
 
-    # ---- slots: review ---------------------------------------------------------------------------
+    # ---- scrub page: review table ----------------------------------------------------------------
     def _fill_table(self) -> None:
         self._filling = True
         t = self.table
@@ -515,7 +815,9 @@ class MainWindow(QMainWindow):
 
             shown = s["text"] if s["type"] != "secret" else "•" * min(8, len(s["text"]))
             for c, val in ((2, shown), (3, s["source"]), (4, f"{s['confidence']:.2f}"), (5, s["reason"])):
-                t.setItem(r, c, QTableWidgetItem(val))
+                item = QTableWidgetItem(val)
+                item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+                t.setItem(r, c, item)
         self._filling = False
 
     def _item_changed(self, item: QTableWidgetItem) -> None:
@@ -523,121 +825,248 @@ class MainWindow(QMainWindow):
             return
         self.spans[item.row()]["keep"] = item.checkState() == Qt.CheckState.Checked
         self._apply()
+        self._orig_changed()
 
     def _type_changed(self, row: int, value: str) -> None:
         if not self._filling and row < len(self.spans):
             self.spans[row]["type"] = value
             self._apply()
+            self._orig_changed()
 
     def _row_selected(self, row: int, *_: int) -> None:
-        if 0 <= row < len(self.spans):
+        if 0 <= row < len(self.spans) and self.text is not None and self.orig_view.can_add:
             self.orig_view.reveal(self.spans[row]["start"])
 
-    def _add_manual(self) -> None:
-        manual = self.manual_text.text()
-        if not manual or self.text is None:
+    def _add_selection(self, selected: str, type_: str) -> None:
+        """Right-click > Scrub selection as <type>: add every occurrence of the selected text."""
+        if self.text is None or not selected:
             return
         found = 0
-        for m in re.finditer(re.escape(manual), self.text):
-            self.spans.append({"start": m.start(), "end": m.end(), "text": manual, "type": self.manual_type.currentText(),
+        for m in re.finditer(re.escape(selected), self.text):
+            self.spans.append({"start": m.start(), "end": m.end(), "text": selected, "type": type_,
                                "source": "manual", "confidence": 1.0, "reason": "added by reviewer", "keep": True})
             found += 1
         if not found:
             self.statusBar().showMessage("That text wasn't found in the original.", 4000)
             return
         self.spans.sort(key=lambda s: s["start"])
-        self.manual_text.clear()
         self._fill_table()
         self._apply()
-        self.statusBar().showMessage(f"Added {found} item(s).", 4000)
+        self._orig_changed()
 
     def _apply(self) -> None:
-        """Re-run the transform for the current selection and refresh both side-by-side views."""
+        """Re-run the transform for the current selection and refresh both text boxes."""
         if self.text is None:
             return
+        kept = [Span(**{k: v for k, v in s.items() if k != "keep"}) for s in self.spans if s["keep"]]
         rejected = frozenset(s["text"] for s in self.spans if not s["keep"])
         try:
-            self.result = self.scrubbers[self.detected_layers].apply(
-                self.text, self._kept_spans(), self.session, MODE, allow=rejected)
+            self.result = self.scrubbers[self.detected_layers].apply(self.text, kept, self.session, MODE, allow=rejected)
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(self, "Something went wrong", f"{type(exc).__name__}: {exc}")
             return
-        self.orig_view.set_content(self.text, span_highlights(self.spans))
         self.out_view.set_content(self.result.scrubbed_text, output_highlights(self.result.scrubbed_text, self.session))
         rep = self.result.report
-        n = sum(1 for s in self.spans if s["keep"])
-        extra = len(rep["leak_fixes"])
-        msg = f"{n} item(s) will be hidden from the AI."
-        if extra:
-            msg += f" {extra} repeated mention(s) elsewhere in the text were caught as well."
-        self.report_label.setText(msg)
-        self.preview_warnings.setText("\n".join(f"⚠ {w}" for w in rep["warnings"]))
-        self._rehydrate()
+        msg = f"{len(kept)} item(s) will be hidden from the AI."
+        if rep["leak_fixes"]:
+            msg += f" {len(rep['leak_fixes'])} repeated mention(s) elsewhere in the text were caught as well."
+        warns = ([self._detect_warn] if self._detect_warn else []) + list(rep["warnings"])
+        if warns:
+            msg += "   ⚠ " + " · ".join(warns)
+        self.statusBar().showMessage(msg)
+        self._sync_controls()
 
-    # ---- slots: copy / send ----------------------------------------------------------------------
     def _copy(self) -> None:
-        if self.result is None:
-            self._apply()
-        QApplication.clipboard().setText(self._build_prompt())
+        text = self.out_view.toPlainText()
+        if not text:
+            self.statusBar().showMessage("Nothing to copy yet. Press Update first.", 4000)
+            return
+        QApplication.clipboard().setText(text)
         self.statusBar().showMessage("Scrubbed text copied to the clipboard.", 4000)
 
+    # ---- sending / chat --------------------------------------------------------------------------
+    def _ready_to_send(self, need_scrubber: bool) -> bool:
+        if self.client.provider == "dryrun":
+            self.statusBar().showMessage("Choose a model first. The preview-only option never sends anything.", 5000)
+            return False
+        if self._missing_key():
+            return False
+        if need_scrubber and self.tuple_base() not in self.scrubbers and self._loading:
+            self.statusBar().showMessage("Still loading the detection model. One moment…", 4000)
+            return False
+        return True
+
+    @staticmethod
+    def tuple_base() -> tuple[str, ...]:
+        return tuple(sorted(BASE_LAYERS))
+
     def _send(self) -> None:
-        if self.worker is not None and self.worker.isRunning():
+        """Send button on the Scrub Text page: the scrubbed text (plus a scrubbed instruction) goes to the model."""
+        if self._busy or self._detecting or self.result is None:
             return
-        if self.result is None:
-            self._apply()
-        if self.result is None:
+        if not self._ready_to_send(need_scrubber=True):
             return
-        self.send_btn.setEnabled(False)
-        self.statusBar().showMessage(f"Waiting for {self.client.provider}…")
-        self.worker = SendWorker(self.client, self._build_prompt(), {"purpose": "app", "session_id": self.session.id})
-        self.worker.done.connect(self._sent)
-        self.worker.failed.connect(self._send_failed)
+        if self.text is not None and self.orig_view.toPlainText() != self.text:
+            self.statusBar().showMessage("The original text has changed. Press Update before sending.", 5000)
+            return
+        self._start_send(display=None, scrub_text=self.instruction.text().strip(), pre_scrubbed=self.result.scrubbed_text)
+
+    def _chat_submit(self) -> None:
+        text = self.chat_input.toPlainText().strip()
+        if not text or self._busy or self._detecting:
+            return
+        if not self._ready_to_send(need_scrubber=True):
+            return
+        self.chat_input.clear()
+        self._start_send(display=text, scrub_text=text, pre_scrubbed="")
+
+    def _start_send(self, display: str | None, scrub_text: str, pre_scrubbed: str) -> None:
+        self._busy = True
+        self._sync_controls()
+        self._show_page(PAGE_CHAT)
+        self._pending_bubble = self._add_user_bubble(display) if display is not None else None
+        self._thinking = self._add_text_block("Thinking…", "thinking")
+        base = self.tuple_base()
+        meta = {"purpose": "app", "session_id": self.session.id}
+        self.statusBar().showMessage(f"Waiting for {self._model_label()}…")
+        self.worker = ChatWorker(base, self.scrubbers.get(base), scrub_text, pre_scrubbed, list(self.history),
+                                 self.client, self.session, meta)
+        self.worker.done.connect(self._chat_done)
+        self.worker.failed.connect(self._chat_failed)
         self.worker.start()
 
-    def _sent(self, response: str) -> None:
-        self.send_btn.setEnabled(self.client.provider != "dryrun")
-        self.statusBar().showMessage("Response received.", 4000)
-        self.response_box.setPlainText(response)
-        self.tabs.setCurrentIndex(T_RESPONSE)
-
-    def _send_failed(self, msg: str) -> None:
-        self.send_btn.setEnabled(self.client.provider != "dryrun")
-        self.statusBar().clearMessage()
-        QMessageBox.critical(self, "Sending failed", msg)
-
-    # ---- slots: response -------------------------------------------------------------------------
-    def _rehydrate(self) -> None:
-        response = self.response_box.toPlainText()
-        if not response:
-            self.restored_view.clear()
-            self.rehydrate_note.clear()
-            return
-        restored, warnings = rehydrate(response, self.session)
-        self.restored_view.setPlainText(restored)
-        if warnings:
-            self.rehydrate_note.setStyleSheet(WARN_STYLE)
-            self.rehydrate_note.setText("\n".join(f"⚠ {w}" for w in warnings))
+    def _chat_done(self, scrubber, message: str, raw: str, restored: str, n: int, warnings: list[str]) -> None:
+        if scrubber is not None:
+            self.scrubbers.setdefault(self.tuple_base(), scrubber)
+        self._remove_widget(self._thinking)
+        self._thinking = None
+        if self._pending_bubble is None:  # sent from the Scrub Text page: show what the model actually received
+            self._pending_bubble = self._add_user_bubble(message)
+            self._pending_bubble[1].setText("🛡 Sent scrubbed")
         else:
-            self.rehydrate_note.setStyleSheet(OK_STYLE)
-            self.rehydrate_note.setText("All stand-ins were replaced with the real details. "
-                                        "Removed values (secrets, card numbers…) are never put back.")
+            bubble, caption = self._pending_bubble
+            caption.setText(f"🛡 {n} item(s) scrubbed before sending" if n else "🛡 Checked: nothing to scrub")
+            bubble.setToolTip("What the model received:\n\n" + message)
+        self._pending_bubble = None
+        if restored.strip():
+            self._add_assistant(restored, warnings)
+            self.history += [("user", message), ("assistant", raw)]
+        else:
+            self._add_text_block("The model returned an empty reply.", "chatError")
+        self.statusBar().clearMessage()
+        self._busy = False
+        self._sync_controls()
+
+    def _chat_failed(self, msg: str) -> None:
+        self._remove_widget(self._thinking)
+        self._thinking = None
+        self._pending_bubble = None
+        self._add_text_block(f"Couldn't get a reply: {msg}", "chatError")
+        self.statusBar().clearMessage()
+        self._busy = False
+        self._sync_controls()
+
+    # ---- chat widgets ----------------------------------------------------------------------------
+    def _chat_add(self, widget: QWidget) -> None:
+        self.chat_empty.hide()
+        self.chat_layout.insertWidget(self.chat_layout.count() - 1, widget)
+        self._chat_widgets.append(widget)
+        QTimer.singleShot(60, self._scroll_chat)
+
+    def _scroll_chat(self) -> None:
+        bar = self.chat_scroll.verticalScrollBar()
+        bar.setValue(bar.maximum())
+
+    def _remove_widget(self, widget: QWidget | None) -> None:
+        if widget is None:
+            return
+        if widget in self._chat_widgets:
+            self._chat_widgets.remove(widget)
+        self.chat_layout.removeWidget(widget)
+        widget.deleteLater()
+
+    def _label(self, text: str, name: str) -> QLabel:
+        lab = QLabel(text)
+        lab.setObjectName(name)
+        lab.setWordWrap(True)
+        lab.setTextFormat(Qt.TextFormat.PlainText)  # model output is shown literally, never as HTML
+        lab.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        return lab
+
+    def _add_user_bubble(self, text: str) -> tuple[QLabel, QLabel]:
+        row = QWidget()
+        h = QHBoxLayout(row)
+        h.setContentsMargins(0, 0, 0, 0)
+        box = QVBoxLayout()
+        box.setSpacing(4)
+        bubble = self._label(text, "userBubble")
+        bubble.setMaximumWidth(620)
+        caption = QLabel("")
+        caption.setObjectName("caption")
+        box.addWidget(bubble)
+        box.addWidget(caption, 0, Qt.AlignmentFlag.AlignRight)
+        h.addStretch(1)
+        h.addLayout(box)
+        self._chat_add(row)
+        return bubble, caption
+
+    def _add_text_block(self, text: str, name: str) -> QWidget:
+        lab = self._label(text, name)
+        self._chat_add(lab)
+        return lab
+
+    def _add_assistant(self, text: str, warnings: list[str]) -> None:
+        block = QWidget()
+        v = QVBoxLayout(block)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(6)
+        v.addWidget(self._label(text, "assistantText"))
+        if warnings:
+            v.addWidget(self._label("⚠ " + " · ".join(warnings), "caption"))
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        copy = QToolButton()
+        copy.setObjectName("iconBtn")
+        copy.setIcon(copy_icon("#9a9da3"))
+        copy.setIconSize(QSize(18, 18))
+        copy.setToolTip("Copy")
+        copy.clicked.connect(lambda _=False, t=text: self._copy_text(t))
+        actions.addWidget(copy)
+        actions.addStretch(1)
+        v.addLayout(actions)
+        self._chat_add(block)
+
+    def _copy_text(self, text: str) -> None:
+        QApplication.clipboard().setText(text)
+        self.statusBar().showMessage("Copied.", 3000)
+
+    def _chat_clear(self) -> None:
+        for w in list(self._chat_widgets):
+            self._remove_widget(w)
+        self.history = []
+        self.chat_empty.show()
+
+    def _new_chat(self) -> None:
+        if self._busy:
+            return
+        self._chat_clear()
 
     # ---- session ---------------------------------------------------------------------------------
     def _new_session(self) -> None:
+        if self._busy or self._detecting:
+            self.statusBar().showMessage("Please wait for the current request to finish.", 4000)
+            return
         self.session = Session()
         self.spans, self.text, self.result = [], None, None
+        self._detect_warn = ""
         self.table.setRowCount(0)
-        self.orig_view.set_content("", [])
+        self.orig_view.clear_highlights()
+        self.orig_view.can_add = False
         self.out_view.set_content("", [])
-        self.response_box.clear()
-        self.detect_warnings.clear()
-        self.report_label.clear()
-        self.preview_warnings.clear()
-        self._set_review_enabled(False)
-        self.tabs.setCurrentIndex(T_INPUT)
-        self._input_changed()
+        self._chat_clear()
+        self._show_page(PAGE_SCRUB)
         self.statusBar().showMessage("New session started. Earlier replacements have been forgotten.", 4000)
+        self._sync_controls()
 
     def closeEvent(self, event) -> None:  # noqa: N802
         for t in (self.loader, self.worker):
@@ -646,14 +1075,60 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
+def checkbox_qss() -> str:
+    """Dark-theme checkbox boxes with a white tick (the tick is drawn in code and saved to a temp file)."""
+    import tempfile
+
+    image = ""
+    try:
+        path = Path(tempfile.gettempdir()) / "pii_scrubber_check.png"
+        pm = QPixmap(14, 14)
+        pm.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(QColor("#ffffff"))
+        pen.setWidthF(1.8)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        p.setPen(pen)
+        p.drawPolyline([QPointF(3.2, 7.4), QPointF(6.0, 10.0), QPointF(10.8, 4.2)])
+        p.end()
+        if pm.save(str(path)):
+            image = f"image:url({path.as_posix()});"
+    except Exception:  # noqa: BLE001 - cosmetic only
+        pass
+    return (
+        "QCheckBox::indicator, QTableView::indicator { width:14px; height:14px; border:1px solid #6b6e73;"
+        " border-radius:3px; background:#1b1c20; }"
+        f"QCheckBox::indicator:checked, QTableView::indicator:checked {{ background:#2f7bff; border-color:#2f7bff; {image} }}"
+    )
+
+
+def apply_theme(app: QApplication) -> None:
+    app.setStyle("Fusion")
+    pal = QPalette()
+    for role, colour in (
+        (QPalette.ColorRole.Window, "#202226"), (QPalette.ColorRole.WindowText, "#dfe1e5"),
+        (QPalette.ColorRole.Base, "#131418"), (QPalette.ColorRole.AlternateBase, "#27292d"),
+        (QPalette.ColorRole.Text, "#dfe1e5"), (QPalette.ColorRole.Button, "#2b2d31"),
+        (QPalette.ColorRole.ButtonText, "#dfe1e5"), (QPalette.ColorRole.Highlight, "#2f7bff"),
+        (QPalette.ColorRole.HighlightedText, "#ffffff"), (QPalette.ColorRole.ToolTipBase, "#2b2d31"),
+        (QPalette.ColorRole.ToolTipText, "#dfe1e5"), (QPalette.ColorRole.PlaceholderText, "#7d8189"),
+    ):
+        pal.setColor(role, QColor(colour))
+    app.setPalette(pal)
+    app.setStyleSheet(STYLE + checkbox_qss())
+
+
 def main() -> None:
     app = QApplication(sys.argv)
-    app.setStyleSheet(STYLE)
+    apply_theme(app)
     win = MainWindow()
-    win.resize(1200, 820)
+    win.resize(1280, 800)
     win.show()
     sys.exit(app.exec())
 
 
 if __name__ == "__main__":
     main()
+    
